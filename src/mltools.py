@@ -66,9 +66,13 @@ def rand(x):
       
     
 ### dask block sampling
+
+# unique assignment of a pair (x,y) to a natural number, bijectiv 
 def cantor_pairing(x, y):
     return int((x + y) * (x + y + 1) / 2 + y)
 
+# generalization of cantor pairing to tuples
+# unique assignment of a tuple to a natural number
 def cantor_tuple(index_list):
     t = index_list[0]
     for x in index_list[1:]:
@@ -76,7 +80,7 @@ def cantor_tuple(index_list):
     return t
 
 
-
+# add a variable "split" to xarray x, that contains blocks filled with 0 or 1 with frequency split
 def assign_split(x, block_size=None, split=0.8):
     if block_size is None:
         block_size = get_chunk_sizes(x)
@@ -207,23 +211,4 @@ M = TypeVar('M')
 R = TypeVar('R')
 
 
-def map_data_var_blocks(ds: xr.Dataset,
-                        mapper: Callable[[Dict[str, np.ndarray]], M],
-                        reducer: Callable[[Sequence[M]], R] = None,
-                        block_sizes: Sequence[Tuple[str, int]] = None) \
-        -> Union[R, Sequence[M]]:
-    """Sequentially apply a *mapper* function followed by an optional a
-    *reducer* function to all data blocks of all data variables
-    of given dataset *ds*.
-
-    The data blocks' order and shapes are predescribed
-    by *block_sizes* argument, which is a sequence comprising
-    dimension name and block size pairs. If *block_size is not given,
-    the chunk sizes of data variables are used instead.
-    """
-    results = [
-        mapper(var_blocks)
-        for var_blocks in iter_data_var_blocks(ds, block_sizes=block_sizes)
-    ]
-    return reducer(results) if reducer else results
 
