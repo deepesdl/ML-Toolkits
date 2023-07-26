@@ -35,53 +35,63 @@ warnings.filterwarnings('ignore')
 
 
 
-def getRange(ds, var):
+def getRange(ds: xr.Dataset, var: str):
+    """returns min and max values of variable var of xarray ds"""
     x = ds[var].min().values
     y = ds[var].max().values
     return [x,y]
 
-def getStatistics(ds, var):
+def getStatistics(ds: xr.Dataset, var: str):
+    """returns mean and std values of variable var of xarray ds"""
     x = ds[var].mean().values
     y = ds[var].std().values
     return [x,y]
 
-def normalize(x, xmin, xmax):
+def normalize(x: np.ndarray, xmin: float, xmax: float):
+    """min-max feature scaling of x, shift values to range [0,1]"""
     return (x - xmin ) / (xmax - xmin)
 
 
-def standardize(x, xmean, xstd):
+def standardize(x: np.ndarray, xmean: float, xstd: float):
+    """transforms distribution to mean 0 and variance 1"""
     return (x - xmean ) / xstd
 
-def undo_normalizing(x, xmin, xmax):
+def undo_normalizing(x: np.ndarray, xmin: float, xmax: float):
+    """inverse operation of normalization"""
     return x*(xmax - xmin) + xmin
 
-def undo_standardizing(x, xmean, xstd):
+def undo_standardizing(x: np.ndarray, xmean: float, xstd: float):
+    """inverse operation of standardization"""
     return x * xstd + xmean
 
 
-# assign random split
-def rand(x):
+def rand(x: xr.Dataset):
+    """assign random split"""
     da.random.seed(32)
     return ("time", "lat", "lon"), da.random.random((list(x.dims.values())), chunks=([v for k,v in get_chunk_sizes(x)])) < 0.8
       
     
 ### dask block sampling
 
-# unique assignment of a pair (x,y) to a natural number, bijectiv 
-def cantor_pairing(x, y):
+def cantor_pairing(x: int, y: int):
+    """unique assignment of a pair (x,y) to a natural number, bijectiv """
     return int((x + y) * (x + y + 1) / 2 + y)
 
-# generalization of cantor pairing to tuples
-# unique assignment of a tuple to a natural number
-def cantor_tuple(index_list):
+
+# for random seed generation
+def cantor_tuple(index_list: list):
+    """unique assignment of a tuple to a natural number, generalization of cantor pairing to tuples"""
     t = index_list[0]
     for x in index_list[1:]:
         t = cantor_pairing(t, x)
     return t
 
 
-# add a variable "split" to xarray x, that contains blocks filled with 0 or 1 with frequency split
-def assign_split(x, block_size=None, split=0.8):
+def assign_split(x: xr.Dataset, block_size: Sequence[Tuple[str, int]] = None, split: float = 0.8):
+    """Block sampling: add a variable "split" to xarray x, that contains blocks filled with 0 or 1 with frequency split
+    Usage:
+    xds = xr.open_zarr("***.zarr")
+    cube_with_split = assign_split(xds, block_size=[("time", 10), ("lat", 20), ("lon", 20)], split=0.5)"""
     if block_size is None:
         block_size = get_chunk_sizes(x)
 
@@ -100,15 +110,12 @@ def assign_split(x, block_size=None, split=0.8):
 
     return x.assign({"split": block_rand})
   
-# Usage:
-# xds = xr.open_zarr("data/lst_small.zarr")
-# cube_with_split = assign_split(
-#     xds, block_size=[("time", 10), ("lat", 20), ("lon", 20)], split=0.5
-# )
+
        
 ### pytorch training
 
 def train_one_epoch(epoch_index, training_loader, model, loss_fn, optimizer, device):
+    """pytorch model training, training of one epoch"""
     running_loss = 0.
     last_loss = 0.
     train_pred = np.empty(0)
@@ -144,6 +151,7 @@ def train_one_epoch(epoch_index, training_loader, model, loss_fn, optimizer, dev
 
 
 def test(dataloader, model, loss_fn, device):
+    """pytorch model testing"""
     test_pred = np.empty(0)
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
