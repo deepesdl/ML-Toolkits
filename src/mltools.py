@@ -114,7 +114,7 @@ def assign_split(x: xr.Dataset, block_size: Sequence[Tuple[str, int]] = None, sp
        
 ### pytorch training
 
-def train_one_epoch(epoch_index, training_loader, model, loss_fn, optimizer, device):
+def train_one_epoch(epoch_index: int, training_loader: torch.utils.data.DataLoader, model: torch.nn.Module, loss_fn: torch.nn.modules.loss, optimizer: torch.optim, device:str):
     """pytorch model training, training of one epoch"""
     running_loss = 0.
     last_loss = 0.
@@ -150,7 +150,7 @@ def train_one_epoch(epoch_index, training_loader, model, loss_fn, optimizer, dev
     return model, train_pred, last_loss
 
 
-def test(dataloader, model, loss_fn, device):
+def test(dataloader: torch.utils.data.DataLoader, model: torch.nn.Module, loss_fn: torch.nn.modules.loss, device: str):
     """pytorch model testing"""
     test_pred = np.empty(0)
     size = len(dataloader.dataset)
