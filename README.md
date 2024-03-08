@@ -4,7 +4,7 @@ The ML Toolkits provide a set of best practice Python-based Jupyter Notebooks th
 
 ## Installation
 
-Creaqte a Python package by executing: 
+Create a Python package by executing: 
 ```bash
 python setup.py sdist bdist_wheel
 ```
