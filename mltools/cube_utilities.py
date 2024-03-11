@@ -48,6 +48,49 @@ def iter_data_var_blocks(ds: xr.Dataset,
         yield var_blocks
 
 
+def get_chunk_by_index(ds: xr.Dataset, index: int, block_sizes: Sequence[Tuple[str, int]] = None) -> Dict[
+    str, np.ndarray]:
+    """
+    Returns a specific data chunk from an xarray.Dataset by index.
+
+    Parameters:
+    - ds: The xarray.Dataset from which to retrieve a chunk.
+    - index: The linear index of the chunk to retrieve.
+    - block_sizes: An optional sequence of tuples specifying the block size for each dimension.
+                   Each tuple should contain a dimension name and a block size for that dimension.
+                   If not provided, the function will attempt to use the dataset's chunk sizes.
+
+    Returns:
+    A dictionary where keys are variable names and values are the chunk data as numpy arrays.
+    """
+    if block_sizes is None:
+        # Assume a function `get_chunk_sizes(ds)` to determine the block sizes from the dataset
+        block_sizes = get_chunk_sizes(ds)
+
+    # Calculate the total number of chunks along each dimension
+    dim_chunks = [range(0, ds.dims[dim_name], size) for dim_name, size in block_sizes]
+    total_chunks_per_dim = [len(list(chunks)) for chunks in dim_chunks]
+
+    # Convert the linear index to a multi-dimensional index
+    multi_dim_index = np.unravel_index(index, total_chunks_per_dim)
+
+    # Calculate the slice for each dimension based on the multi-dimensional index
+    dim_slices = {}
+    for dim_idx, (dim_name, block_size) in enumerate(block_sizes):
+        start = multi_dim_index[dim_idx] * block_size
+        end = min(start + block_size, ds.dims[dim_name])
+        dim_slices[dim_name] = slice(start, end)
+
+    # Extract the chunk for each variable
+    var_blocks = {}
+    for var_name, var in ds.data_vars.items():
+        # Determine the slices applicable to this variable
+        indexers = {dim_name: dim_slice for dim_name, dim_slice in dim_slices.items() if dim_name in var.dims}
+        # Extract the chunk using variable-specific indexers
+        var_blocks[var_name] = var.isel(indexers).values
+
+    return var_blocks
+
 def rechunk_cube(source_cube: xr.DataArray, target_chunks: dict | tuple | list, target_path: str):
     """
     Rechunks an xarray DataArray to a new chunking scheme.
@@ -58,7 +101,7 @@ def rechunk_cube(source_cube: xr.DataArray, target_chunks: dict | tuple | list, 
 
     - target_chunks: dict | tuple | list
       The desired chunk sizes for the rechunking operation.
-      If a dict, specify sizes for each named dimension, e.g., {'lon': 60, 'lat': 1, 'time': 101}.
+      If a dict, specify sizes for each named dimension, e.g., {'lon': 60, 'lat': 1, 'time': 100}.
       If a tuple or list, specify sizes by order, corresponding to the array's dimensions.
 
     - target_path: str
