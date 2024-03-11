@@ -4,9 +4,12 @@ import xarray as xr
 
 def getStatistics(ds: xr.Dataset, var: str):
     """returns mean and std values of variable var of xarray ds"""
-    x = ds[var].mean().values
-    y = ds[var].std().values
-    return [x,y]
+    data_var = ds[var]
+
+    mean = data_var.mean().compute()
+    std = data_var.std().compute()
+
+    return [mean, std]
 
 
 def normalize(x: np.ndarray, xmin: float, xmax: float):
