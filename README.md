@@ -42,7 +42,7 @@ normalized_data = normalize(your_data, data_min, data_max)
 model, train_pred, last_loss = train_one_epoch(epoch_index, training_loader, model, loss_fn, optimizer, device)
 ```
 
-Checkout the Examples directory to discover additional usage samples.
+Checkout the Examples directory to discover additional use cases.
 ## License
 
 MLTools is released under the MIT License. See the [LICENSE](https://github.com/deepesdl/ML-Toolkits/blob/develop/LICENSE) file for more details.
