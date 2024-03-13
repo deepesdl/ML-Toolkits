@@ -1,0 +1,10 @@
+dask==2022.7.1
+torch==2.2.0
+torchvision==0.17.0
+torchaudio==2.2.0
+scikit-learn==1.3.1
+xarray==2024.2.0
+h5py==3.10.0
+zarr==2.17.0
+rechunker==0.5.2
+

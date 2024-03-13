@@ -1,5 +1,13 @@
 from setuptools import setup, find_packages
 
+"""
+Create a Python package by executing: 
+python setup.py sdist bdist_wheel
+
+You can install mltools using the resulting *.whl file:
+pip install ./dist/mltools-0.1-py3-none-any.whl
+"""
+
 with open('requirements.txt') as f:
     required_packages = f.read().splitlines()
 
@@ -8,7 +16,7 @@ setup(
     version='0.1',
     packages=find_packages(),
     description='ML package for data cubes',
-    long_description=open('README.md').read(),
+    long_description=open('../README.md').read(),
     long_description_content_type='text/markdown',
     author='Julia Peters',
     author_email='julia.peters@informatik.uni-leipzig.de',
