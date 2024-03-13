@@ -59,7 +59,7 @@ To utilize `mltools` for distributed training, navigate to the `Examples` direct
 torchrun --standalone --nproc_per_node=<number_of_processes> distributed_training.py <epochs>
 ```
 
-Replace `<number_of_processes>` with the number of processes you wish to run per node, `<number_of_processes>`, and `<epochs>` with the total number of training epochs.
+Replace `<number_of_processes>` with the number of processes you wish to run per node, and `<epochs>` with the total number of training epochs.
 
 ## Changes
 
