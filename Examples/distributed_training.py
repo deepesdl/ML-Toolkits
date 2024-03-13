@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 from mltools.cube_utilities import iter_data_var_blocks, get_chunk_by_index, get_chunk_sizes
-from mltools.data_assignment import assign_split
+from mltools.sampling import assign_block_split
 from mltools.data_processing import standardize, getStatistics
 
 
@@ -95,7 +95,7 @@ def load_train_objs():
     xdsm = ds.assign(land_mask= (['time','lat','lon'],lm.rechunk(chunks=([v for k,v in get_chunk_sizes(ds)]))))
 
     # block sampling
-    xds = assign_split(xdsm, block_size=[("time", 10), ("lat", 100), ("lon", 100)], split=0.8)
+    xds = assign_block_split(xdsm, block_size=[("time", 10), ("lat", 100), ("lon", 100)], split=0.8)
     full_dataset = ChunkDataset(xds, at_stat=at_stat, lst_stat=lst_stat)
     train_size = int(0.7 * len(full_dataset))
     test_size = len(full_dataset) - train_size

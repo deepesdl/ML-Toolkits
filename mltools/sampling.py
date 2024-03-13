@@ -32,11 +32,11 @@ def cantor_tuple(index_list: list):
     return t
 
 
-def assign_split(x: xr.Dataset, block_size: Sequence[Tuple[str, int]] = None, split: float = 0.8):
+def assign_block_split(x: xr.Dataset, block_size: Sequence[Tuple[str, int]] = None, split: float = 0.8):
     """Block sampling: add a variable "split" to xarray x, that contains blocks filled with 0 or 1 with frequency split
     Usage:
     xds = xr.open_zarr("***.zarr")
-    cube_with_split = assign_split(xds, block_size=[("time", 10), ("lat", 20), ("lon", 20)], split=0.5)"""
+    cube_with_split = assign_block_split(xds, block_size=[("time", 10), ("lat", 20), ("lon", 20)], split=0.5)"""
     if block_size is None:
         block_size = get_chunk_sizes(x)
 
