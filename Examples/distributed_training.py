@@ -91,7 +91,6 @@ def load_train_objs():
     at_stat = get_statistics(ds, 'air_temperature_2m')
     lst_stat = get_statistics(ds, 'land_surface_temperature')
 
-
     xdsm = ds.assign(land_mask= (['time','lat','lon'],lm.rechunk(chunks=([v for k,v in get_chunk_sizes(ds)]))))
 
     # block sampling
@@ -108,7 +107,7 @@ def load_train_objs():
     return train_set, test_set, model, optimizer
 
 
-def main(save_every: int, total_epochs: int, batch_size: int, snapshot_path: str = "snapshot.pt"):
+def main(save_every: int, total_epochs: int, batch_size: int, snapshot_path: str = "snapshot.pt", best_model_path: str ='Best_Model.pt'):
     """
     The main function to run the distributed training process.
     It initializes distributed training, prepares data loaders, and starts the training loop.
@@ -117,7 +116,7 @@ def main(save_every: int, total_epochs: int, batch_size: int, snapshot_path: str
     train_set, test_set, model, optimizer = load_train_objs()
     train_data = prepare_dataloader(train_set, batch_size, callback_fn=flatten_batch, num_workers=5)
     test_data = prepare_dataloader(test_set, batch_size, callback_fn=flatten_batch, num_workers=5)
-    trainer = Trainer(model, train_data, test_data, optimizer, save_every, snapshot_path, task_type='supervised')
+    trainer = Trainer(model, train_data, test_data, optimizer, save_every, best_model_path, snapshot_path, task_type='supervised')
     dist_train(trainer, total_epochs)
 
 
@@ -126,7 +125,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='simple distributed training job')
     parser.add_argument('total_epochs', type=int, help='Total epochs to train the model')
-    parser.add_argument('save_every', type=int, help='How often to save a snapshot')
+    parser.add_argument('--save_every', default=10, type=int, help='How often to save a snapshot')
     parser.add_argument('--batch_size', default=7, type=int, help='Input batch size on each device (default: 32)')
     args = parser.parse_args()
 

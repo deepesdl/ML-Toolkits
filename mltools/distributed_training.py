@@ -60,7 +60,8 @@ class Trainer:
             test_data: DataLoader,
             optimizer: torch.optim.Optimizer,
             save_every: int,
-            snapshot_path: str,
+            best_model_path: str,
+            snapshot_path: str = None,
             early_stopping: bool = True,
             patience: int = 10,
             metrics: list = None,
@@ -74,6 +75,7 @@ class Trainer:
         self.optimizer = optimizer
         self.save_every = save_every  # Frequency of saving training snapshots
         self.epochs_run = 0  # Tracks the number of epochs run
+        self.best_model_path = best_model_path # Path to best model computed in current training
         self.snapshot_path = snapshot_path  # Path to save snapshots
         self.early_stopping = early_stopping  # Enables/disables early stopping
         self.patience = patience  # Number of epochs to wait before early stop if no progress on the validation set
@@ -207,7 +209,7 @@ class Trainer:
         """
         for epoch in range(self.epochs_run, max_epochs):
             self._run_epoch(epoch)
-            if self.gpu_id == 0 and epoch % self.save_every == 0:
+            if self.gpu_id == 0 and epoch % self.save_every == 0 and self.snapshot_path is not None:
                 self._save_snapshot(epoch)
             dist.barrier()
 
@@ -218,8 +220,7 @@ class Trainer:
                 self.strikes = 0
                 self.best_val_loss = epoch_val_loss
                 # Saving the best model
-                best_model_path = 'Best_Model.pt'
-                torch.save(self.model.module.state_dict(), best_model_path)
+                torch.save(self.model.module.state_dict(), self.best_model_path)
                 if self.gpu_id == 0:
                     print(f"New best model saved with validation loss: {epoch_val_loss}")
             else:
