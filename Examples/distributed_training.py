@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 import numpy as np
 from mltools.cube_utilities import iter_data_var_blocks, get_chunk_by_index, get_chunk_sizes
 from mltools.sampling import assign_block_split
-from mltools.data_processing import standardize, getStatistics
+from mltools.data_processing import standardize, get_statistics
 
 
 class ChunkDataset(Dataset):
@@ -88,8 +88,8 @@ def load_train_objs():
     lm0 = da.from_array(globe.is_land(lat_grid, lon_grid))
 
     lm = da.stack([lm0 for i in range(ds.dims['time'])], axis = 0)
-    at_stat = getStatistics(ds, 'air_temperature_2m')
-    lst_stat = getStatistics(ds, 'land_surface_temperature')
+    at_stat = get_statistics(ds, 'air_temperature_2m')
+    lst_stat = get_statistics(ds, 'land_surface_temperature')
 
 
     xdsm = ds.assign(land_mask= (['time','lat','lon'],lm.rechunk(chunks=([v for k,v in get_chunk_sizes(ds)]))))

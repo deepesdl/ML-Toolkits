@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 
 
-def getStatistics(ds: xr.Dataset, var: str):
+def get_statistics(ds: xr.Dataset, var: str):
     """returns mean and std values of variable var of xarray ds"""
     data_var = ds[var]
 
@@ -32,7 +32,7 @@ def undo_standardizing(x: np.ndarray, xmean: float, xstd: float):
     return x * xstd + xmean
 
 
-def getRange(ds: xr.Dataset, var: str):
+def get_range(ds: xr.Dataset, var: str):
     """returns min and max values of variable var of xarray ds"""
     x = ds[var].min().values
     y = ds[var].max().values
