@@ -6,7 +6,7 @@ The ML Toolkits provide a set of best practice Python-based Jupyter Notebooks th
 
 Create a conda package by executing: 
 ```bash
-conda build conda_recipe
+conda build .
 ```
 
 Determine your Anaconda path with:
