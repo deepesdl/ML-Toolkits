@@ -48,6 +48,18 @@ def iter_data_var_blocks(ds: xr.Dataset,
         yield var_blocks
 
 
+def calculate_total_chunks(ds: xr.Dataset) -> int:
+    """Calculate the total number of chunks for the dataset based on maximum chunk sizes."""
+    block_sizes = get_chunk_sizes(ds)
+
+    total_chunks = np.prod([
+        len(range(0, ds.dims[dim_name], size))
+        for dim_name, size in block_sizes
+    ])
+
+    return total_chunks
+
+
 def get_chunk_by_index(ds: xr.Dataset, index: int, block_sizes: Sequence[Tuple[str, int]] = None) -> Dict[
     str, np.ndarray]:
     """
