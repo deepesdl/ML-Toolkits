@@ -1,122 +1,130 @@
-from typing import Optional, Tuple
 from xcube.core.store import new_data_store
 from global_land_mask import globe
-from torch.utils.data import random_split
 import dask.array as da
+import xarray as xr
+import random
 from torch import nn
 from mltools.distributed_training import ddp_init, prepare_dataloader, dist_train, Trainer
 import torch
-from torch.utils.data import Dataset
 import numpy as np
-from mltools.cube_utilities import iter_data_var_blocks, get_chunk_by_index, get_chunk_sizes
-from mltools.sampling import assign_block_split
-from mltools.data_processing import standardize, get_statistics
+from mltools.cube_utilities import get_chunk_by_index, get_chunk_sizes, calculate_total_chunks
+from mltools.data_assignment import assign_block_split
+from mltools.data_processing import standardize
+from torch.utils.data import TensorDataset
 
 
-class ChunkDataset(Dataset):
+def preprocess_data(ds: xr.Dataset):
+    """Preprocess and split dataset into training and testing datasets.
+
+    Args:
+    ds (xr.Dataset): The input dataset to be processed.
+
+    Returns:
+    Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: Returns preprocessed and split training and testing data.
     """
-        A dataset class that handles data chunks for distributed training.
-        It takes a multi-dimensional dataset, processes it in chunks, and filters
-        out relevant features for training.
-        """
-    def __init__(self, xds, block_sizes=None, at_stat=None, lst_stat=None):
-        # Initialize dataset with given parameters
-        self.xds = xds  # The multi-dimensional input dataset
-        self.block_sizes = block_sizes if block_sizes is not None else get_chunk_sizes(xds)
-        self.at_stat = at_stat  # Statistics for air temperature normalization
-        self.lst_stat = lst_stat  # Statistics for land surface temperature normalization
 
-        # Calculate total chunks without pre-loading them
-        self.total_chunks = np.prod([len(range(0, xds.dims[dim_name], size)) for dim_name, size in self.block_sizes])
-        # self.total_chunks = len(list(iter_data_var_blocks(self.xds, self.block_sizes)))
+    # Calculate the total number of data chunks in the dataset
+    total_chunks = calculate_total_chunks(ds)
 
-    def _preprocess_chunk(self, chunk: dict) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-        # Preprocess each chunk of data: filter land areas and remove NaNs
-        # Returns standardized feature and target arrays for training
+    # Initialize lists to hold the data from selected chunks
+    X_train_all, X_test_all, y_train_all, y_test_all = [], [], [], []
+
+    # Keep track of processed chunks to avoid repetition
+    processed_chunks = list()
+
+    # Process chunks until 3 unique chunks have been processed
+    while len(processed_chunks) < 3:
+        chunk_index = random.randint(0, total_chunks - 1)  # Select a random chunk index
+        if chunk_index in processed_chunks:
+            continue  # Skip if this chunk has already been processed
+
+        # Retrieve the chunk by its index
+        chunk = get_chunk_by_index(ds, chunk_index)
+
+        # Flatten the data and select only land values, then drop NaN values
         cf = {x: chunk[x].ravel() for x in chunk.keys()}
         lm = cf['land_mask']
         cft = {x: cf[x][lm == True] for x in cf.keys()}
         lst = cft['land_surface_temperature']
         cfn = {x: cft[x][~np.isnan(lst)] for x in cf.keys()}
 
+        # Proceed only if there are valid land surface temperature data points
         if len(cfn['land_surface_temperature']) > 0:
-            X = standardize(cfn['air_temperature_2m'], *self.at_stat)
-            y = standardize(cfn['land_surface_temperature'], *self.lst_stat)
+            processed_chunks.append(chunk_index)
+            X = cfn['air_temperature_2m']
+            y = cfn['land_surface_temperature']
 
-            return X, y
-        else:
-            return None, None
+            # Split the data based on the 'split' attribute
+            X_train, X_test = X[cfn['split'] == True], X[cfn['split'] == False]
+            y_train, y_test = y[cfn['split'] == True], y[cfn['split'] == False]
 
-    def __len__(self):
-        # Returns the total number of chunks in the dataset
-        return self.total_chunks
+            # Append processed data to their respective lists
+            X_train_all.append(X_train)
+            X_test_all.append(X_test)
+            y_train_all.append(y_train)
+            y_test_all.append(y_test)
 
-    def __getitem__(self, idx):
-        # Retrieves a specific chunk by index, preprocesses it, and returns it as input and target tensors
-        chunk = get_chunk_by_index(self.xds, idx, self.block_sizes)
-        X, y = self._preprocess_chunk(chunk)
-        if X is not None and len(X) > 0:
-            ds = torch.utils.data.TensorDataset(torch.tensor(X).float(), torch.tensor(y).float())
-            return ds
-        else:
-            # None
-            return torch.utils.data.TensorDataset(torch.tensor([]), torch.tensor([]))
+    # Concatenate the data from all processed chunks
+    X_train = np.concatenate(X_train_all)
+    X_test = np.concatenate(X_test_all)
+    y_train = np.concatenate(y_train_all)
+    y_test = np.concatenate(y_test_all)
 
+    # Standardize the data
+    X_mean, X_std = np.mean(X_train), np.std(X_train)
+    y_mean, y_std = np.mean(y_train), np.std(y_train)
+    X_train = standardize(X_train, X_mean, X_std)
+    X_test = standardize(X_test, X_mean, X_std)
+    y_train = standardize(y_train, y_mean, y_std)
+    y_test = standardize(y_test, y_mean, y_std)
 
-def flatten_batch(batch):
-    # A helper function to flatten nested batches of data for training
-    # Converts a list of samples into a tensor with appropriate dimensions
-    # Assuming each sample in the batch is a tensor of shape (mini_batch, channels, height, width)
-    batch_tensor = torch.stack(batch, dim=0)
-
-    # Flatten the batch and mini_batch dimensions
-    batch_size, mini_batch, channels, height, width = batch_tensor.size()
-    flattened_batch = batch_tensor.view(batch_size * mini_batch, channels, height, width)
-
-    return flattened_batch
+    return X_train, X_test, y_train, y_test
 
 
 def load_train_objs():
-    # Loads and preprocesses the training objects: the dataset, model, and optimizer
-    # This includes loading the dataset, calculating statistics, creating a mask for land areas,
-    # and splitting the dataset into training and test sets.
+    """Load and preprocess dataset, returning prepared training and testing sets, model, and optimizer."""
+
+    # Load dataset from storage
     data_store = new_data_store("s3", root="esdl-esdc-v2.1.1", storage_options=dict(anon=True))
     dataset = data_store.open_data('esdc-8d-0.083deg-184x270x270-2.1.1.zarr')
     ds = dataset[['land_surface_temperature', 'air_temperature_2m']]
 
-    lon_grid, lat_grid = np.meshgrid(ds.lon,ds.lat)
+    # Create a land mask
+    lon_grid, lat_grid = np.meshgrid(ds.lon, ds.lat)
     lm0 = da.from_array(globe.is_land(lat_grid, lon_grid))
+    lm = da.stack([lm0 for _ in range(ds.dims['time'])], axis=0)
 
-    lm = da.stack([lm0 for i in range(ds.dims['time'])], axis = 0)
-    at_stat = get_statistics(ds, 'air_temperature_2m')
-    lst_stat = get_statistics(ds, 'land_surface_temperature')
+    # Assign land mask to the dataset and split data into blocks
+    ds = ds.assign(land_mask=(['time', 'lat', 'lon'], lm.rechunk(chunks=([v for _, v in get_chunk_sizes(ds)]))))
+    ds = assign_block_split(ds, block_size=[("time", 10), ("lat", 100), ("lon", 100)], split=0.8)
 
-    xdsm = ds.assign(land_mask= (['time','lat','lon'],lm.rechunk(chunks=([v for k,v in get_chunk_sizes(ds)]))))
+    # Preprocess data and split into training and testing sets
+    X_train, X_test, y_train, y_test = preprocess_data(ds)
 
-    # block sampling
-    xds = assign_block_split(xdsm, block_size=[("time", 10), ("lat", 100), ("lon", 100)], split=0.8)
-    full_dataset = ChunkDataset(xds, at_stat=at_stat, lst_stat=lst_stat)
-    train_size = int(0.7 * len(full_dataset))
-    test_size = len(full_dataset) - train_size
+    # Create TensorDataset objects for both training and testing sets
+    train_set = TensorDataset(torch.tensor(X_train), torch.tensor(y_train))
+    test_set = TensorDataset(torch.tensor(X_test), torch.tensor(y_test))
 
-    # Split the dataset into training and test sets
-    train_set, test_set = random_split(full_dataset, [train_size, test_size])
-
+    # Initialize model and optimizer
     model = nn.Linear(in_features=1, out_features=1, bias=True)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+
     return train_set, test_set, model, optimizer
 
 
-def main(save_every: int, total_epochs: int, batch_size: int, snapshot_path: str = "snapshot.pt", best_model_path: str ='Best_Model.pt'):
-    """
-    The main function to run the distributed training process.
-    It initializes distributed training, prepares data loaders, and starts the training loop.
-    """
+def main(save_every: int, total_epochs: int, batch_size: int, snapshot_path: str = "snapshot.pt", best_model_path: str = 'Best_Model.pt'):
+    """Main function to run distributed training process."""
+
+    # Initialize distributed data parallel training
     ddp_init()
+
+    # Load training objects and prepare data loaders
     train_set, test_set, model, optimizer = load_train_objs()
-    train_data = prepare_dataloader(train_set, batch_size, callback_fn=flatten_batch, num_workers=5)
-    test_data = prepare_dataloader(test_set, batch_size, callback_fn=flatten_batch, num_workers=5)
-    trainer = Trainer(model, train_data, test_data, optimizer, save_every, best_model_path, snapshot_path, task_type='supervised')
+    train_loader = prepare_dataloader(train_set, batch_size, num_workers=5)
+    test_loader = prepare_dataloader(test_set, batch_size, num_workers=5)
+
+    # Initialize the trainer and start training
+    trainer = Trainer(model, train_loader, test_loader, optimizer, save_every, best_model_path, snapshot_path, task_type='supervised')
     dist_train(trainer, total_epochs)
 
 
