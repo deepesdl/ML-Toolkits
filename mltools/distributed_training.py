@@ -20,7 +20,7 @@ def ddp_init():
     torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
 
 
-def prepare_dataloader(dataset: Dataset, batch_size: int, callback_fn: Callable, num_workers: int = 0) -> DataLoader:
+def prepare_dataloader(dataset: Dataset, batch_size: int, callback_fn: Callable = None, num_workers: int = 0) -> DataLoader:
 
     """
     Prepares a DataLoader for distributed training.
