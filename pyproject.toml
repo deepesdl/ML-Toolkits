@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mltools"
+version = "0.1.0"
+description = "ML package for data cubes"
+authors = [{ name = "Julia Peters", email = "julia.peters@informatik.uni-leipzig.de" }]
+readme = "../README.md"
+license = { file = "LICENSE" }
+keywords = ["machine learning", "tools", "data cube utilities"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    # Other relevant classifiers can be included here
+]
+requires-python = ">=3.8"
+dependencies = [
+    "dask>2022.7.1",
+    "torch>=2.0",
+    "scikit-learn>=1.3.1",
+    "xarray>=2024.0",
+    "h5py>=3.7.0",
+    "zarr>=2.11",
+    "rechunker>0.5.0",
+]
