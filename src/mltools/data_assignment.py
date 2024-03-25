@@ -3,6 +3,11 @@ import dask.array as da
 import random
 from typing import (Sequence, Tuple)
 import warnings
+
+# add path, if mltools not installed
+import sys
+sys.path.append('../src')
+
 from mltools.cube_utilities import get_chunk_sizes
 
 warnings.filterwarnings('ignore')
