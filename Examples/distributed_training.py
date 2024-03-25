@@ -10,7 +10,7 @@ from torch.utils.data import TensorDataset
 
 # add path, if mltools not installed
 import sys
-sys.path.append('../src')
+sys.path.append('../mltools')
 
 from mltools.cube_utilities import get_chunk_by_index, get_chunk_sizes, calculate_total_chunks
 from mltools.distributed_training import ddp_init, prepare_dataloader, dist_train, Trainer

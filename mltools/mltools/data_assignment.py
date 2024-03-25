@@ -6,7 +6,7 @@ import warnings
 
 # add path, if mltools not installed
 import sys
-sys.path.append('../src')
+sys.path.append('../mltools')
 
 from mltools.cube_utilities import get_chunk_sizes
 
