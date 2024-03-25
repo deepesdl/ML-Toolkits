@@ -3,7 +3,7 @@ import dask.array as da
 import random
 from typing import (Sequence, Tuple)
 import warnings
-from mltools.cube_utilities import get_chunk_sizes
+from src.mltools.cube_utilities import get_chunk_sizes
 
 warnings.filterwarnings('ignore')
 
