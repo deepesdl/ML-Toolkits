@@ -3,8 +3,8 @@ from setuptools import setup, find_packages
 setup(
     name='mltools',
     version='0.1.0',
-    package_dir={'': 'src'},
-    packages=find_packages(where='src'),
+    package_dir={'': 'mltools'},
+    packages=find_packages(where='mltools'),
     install_requires=[
         'bokeh >=2.4.3, <3',
         'dask >2024.2',
