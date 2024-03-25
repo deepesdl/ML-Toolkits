@@ -36,8 +36,7 @@ class Gapfiller:
         self.actual_matrix = None
         self.date = None
         self.data_with_gaps = {}
-        self.directory = os.path.dirname(os.getcwd()) + '/application_results/' + ds_name + "/" \
-            if os.getcwd().split('/')[-1] != 'gapfilling' else 'application_results/' + ds_name + "/"
+        self.directory = self.directory = os.path.join('..', 'gapfilling_results', ds_name)
         self.gap_value = np.nan
         self.historical_data = None
         self.hyperparameters = hyperparameters
