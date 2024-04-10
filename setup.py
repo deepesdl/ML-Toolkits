@@ -17,5 +17,6 @@ setup(
         'xarray >=2024.0',
         'zarr >2.11',
         'rechunker >=0.5.1',
+        'sentinelhub'
     ],
 )
