@@ -1,6 +1,18 @@
 
 # Changelog
 
+## 0.2.0 - [2024-04-10]
+### Added
+- New functionality for gap filling in datasets, implemented in the `gap_dataset.py` and `gap_filling.py` scripts within the `mltools` package. This includes:
+    - The `GapDataset` class for handling datasets with data gaps, enabling the slicing of specific dimensions and the addition of artificial gaps for testing gap-filling algorithms.
+    - The `EarthSystemDataCubeS3` subclass to facilitate operations on ESDC.
+    - The `Gapfiller` class to fill gaps using machine learning models, with a focus on Support Vector Regression (SVR). This class supports various hyperparameter search methods and predictor strategies for gap filling.
+    - Methods in `gap_dataset.py` for retrieving additional data matrices as predictors and processing the actual data matrix for gap analysis.
+- Example script (`gapfilling_process.py`) and detailed usage instructions for the new gap-filling functionality, demonstrating how to apply these methods to real-world datasets.
+
+### Improved
+- Streamlined the Conda (and pip) package creation process to facilitate faster and more efficient package builds with Miniconda.
+
 ## 0.1.0 - [2024-03-13]
 
 ### Added
