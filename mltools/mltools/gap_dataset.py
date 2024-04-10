@@ -4,6 +4,8 @@ import shutil
 import time
 import numpy as np
 import xarray as xr
+import sys
+sys.path.append('../mltools')
 
 """
 In this file we slice a specific dimensions (e.g. area and time range) from the data cube with the values for the specified variable.
@@ -83,7 +85,7 @@ class GapDataset:
         """
         if os.path.exists(directory):
             shutil.rmtree(directory)
-        os.mkdir(directory)
+        os.makedirs(directory, exist_ok=True)
 
     def slice_dataset(self):
         """
@@ -300,10 +302,15 @@ class EarthSystemDataCubeS3(GapDataset):
         - None
         """
         # Open the LCCS dataset from a NetCDF file with the global LCC data
-        directory = 'helper/global_lcc.nc'
-        if not os.path.exists(directory):
-            directory = os.path.dirname(os.getcwd()) + '/' + directory
-        lcc_dataset = xr.open_dataset(directory)['lccs_class']
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        data_file = os.path.join(current_dir, 'helper', 'global_lcc.nc')
+
+        # Check if the file exists at the specified path
+        if not os.path.exists(data_file):
+            raise FileNotFoundError(f"File not found: {data_file}")
+
+        # Open the LCCS dataset from the NetCDF file
+        lcc_dataset = xr.open_dataset(data_file)['lccs_class']
         # Select and slice the LCCS data based on the specified latitude and longitude range
         self.extra_data = lcc_dataset.sel(lat=slice(self.dimensions['lat'][0], self.dimensions['lat'][1]),
                                           lon=slice(self.dimensions['lon'][0], self.dimensions['lon'][1]))
