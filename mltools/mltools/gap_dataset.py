@@ -28,7 +28,7 @@ class GapDataset:
         extra_data: Additional data used as predictors (e.g. Land Cover Classes).
         sliced_ds: The sliced dataset.
     """
-    def __init__(self, ds_name='Test123', variable='land_surface_temperature',
+    def __init__(self, ds, ds_name='Test123',
                  dimensions=None,
                  artificial_gaps=None, actual_matrix='Random'):
         if dimensions is None:
@@ -44,7 +44,7 @@ class GapDataset:
             os.getcwd().split('/')[-1] != 'gapfilling' else 'application_results/' + ds_name + "/"
         self.extra_data = None
         self.sliced_ds = None
-        self.variable = variable
+        self.ds = ds
 
     def get_data(self):
         """
@@ -269,21 +269,24 @@ class EarthSystemDataCubeS3(GapDataset):
     ```
     """
 
-    def slice_dataset(self, ds):
+    def slice_dataset(self):
         """
          Slice the dataset to extract the specific area, latitude, longitude, and time range.
 
-         This method opens the dataset, selects the variable of interest, and slices the dataset based on
+         This method initializes an xcube data store for accessing global data on Amazon S3,
+         opens the dataset, selects the variable of interest, and slices the dataset based on
          the specified dimensions (lat, lon, and times).
 
          Returns:
          - None
          """
+        # Create a data store for accessing global data and open the dataset
         # Slice the dataset to extract the specific area, latitude, longitude, and time range
-        self.sliced_ds = ds.sel(lat=slice(self.dimensions['lat'][0], self.dimensions['lat'][1]),
+        self.sliced_ds = self.ds.sel(lat=slice(self.dimensions['lat'][0], self.dimensions['lat'][1]),
                                 lon=slice(self.dimensions['lon'][0], self.dimensions['lon'][1]),
                                 time=slice(self.dimensions['times'][0], self.dimensions['times'][1]))
         print(self.ds_name, self.sliced_ds.sizes.mapping)
+
 
     def get_extra_matrix(self):
         """
