@@ -16,7 +16,7 @@ which conda
 
 You can install mltools using the resulting *.tar.bz2 file:
 ```bash
-conda install /path/to/anaconda/conda-bld/noarch/mltools-0.1.0-py_0.tar.bz2
+conda install /path/to/anaconda/conda-bld/noarch/mltools-0.2.0-py_0.tar.bz2
 ```
 
 Make sure you have Python version 3.8 or higher.
