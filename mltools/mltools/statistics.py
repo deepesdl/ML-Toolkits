@@ -6,8 +6,8 @@ def get_statistics(ds: xr.Dataset, var: str):
     """returns mean and std values of variable var of xarray ds"""
     data_var = ds[var]
 
-    mean = data_var.mean().compute()
-    std = data_var.std().compute()
+    mean = data_var.mean().compute().values.item()
+    std = data_var.std().compute().values.item()
 
     return [mean, std]
 
