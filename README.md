@@ -34,7 +34,7 @@ If you're planning to use `mltools` with TensorFlow or PyTorch, set up these fra
 To use mltools in your project, simply import the necessary module:
 
 ```python
-from mltools.data_processing import normalize, standardize
+from mltools.statistics import normalize, standardize
 from mltools.torch_training import train_one_epoch
 # Other imports...
 ```
