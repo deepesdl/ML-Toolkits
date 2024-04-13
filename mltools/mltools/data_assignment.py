@@ -8,7 +8,7 @@ import warnings
 import sys
 sys.path.append('../mltools')
 
-from mltools import get_chunk_sizes
+from mltools.cube_utilities import get_chunk_sizes
 
 warnings.filterwarnings('ignore')
 

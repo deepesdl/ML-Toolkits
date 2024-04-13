@@ -12,10 +12,12 @@ from torch.utils.data import TensorDataset
 import sys
 sys.path.append('../mltools')
 
-from mltools import get_chunk_by_index, get_chunk_sizes, calculate_total_chunks
-from mltools import ddp_init, prepare_dataloader, dist_train, Trainer
-from mltools import assign_block_split
-from mltools import standardize
+from mltools.cube_utilities import get_chunk_by_index, get_chunk_sizes, calculate_total_chunks
+from mltools.distributed_training import ddp_init, prepare_dataloader, dist_train, Trainer
+from mltools.data_assignment import assign_block_split
+from mltools.statistics import standardize
+
+from mltools.geo_plots import plot_geo_data
 
 
 def preprocess_data(ds: xr.Dataset):
