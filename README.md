@@ -16,7 +16,7 @@ which conda
 
 You can install mltools using the resulting *.tar.bz2 file:
 ```bash
-conda install /path/to/anaconda/conda-bld/noarch/mltools-0.1.0-py_0.tar.bz2
+conda install /path/to/anaconda/conda-bld/noarch/mltools-0.2.0-py_0.tar.bz2
 ```
 
 Make sure you have Python version 3.8 or higher.
@@ -34,7 +34,7 @@ If you're planning to use `mltools` with TensorFlow or PyTorch, set up these fra
 To use mltools in your project, simply import the necessary module:
 
 ```python
-from mltools.data_processing import normalize, standardize
+from mltools.statistics import normalize, standardize
 from mltools.torch_training import train_one_epoch
 # Other imports...
 ```

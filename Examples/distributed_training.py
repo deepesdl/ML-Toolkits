@@ -4,13 +4,20 @@ import dask.array as da
 import xarray as xr
 import random
 from torch import nn
-from mltools.distributed_training import ddp_init, prepare_dataloader, dist_train, Trainer
 import torch
 import numpy as np
-from mltools.cube_utilities import get_chunk_by_index, get_chunk_sizes, calculate_total_chunks
-from mltools.data_assignment import assign_block_split
-from mltools.data_processing import standardize
 from torch.utils.data import TensorDataset
+
+# add path, if mltools not installed
+import sys
+sys.path.append('../mltools')
+
+from mltools.cube_utilities import get_chunk_by_index, get_chunk_sizes, calculate_total_chunks
+from mltools.distributed_training import ddp_init, prepare_dataloader, dist_train, Trainer
+from mltools.data_assignment import assign_block_split
+from mltools.statistics import standardize
+
+from mltools.geo_plots import plot_geo_data
 
 
 def preprocess_data(ds: xr.Dataset):
