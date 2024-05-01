@@ -1,26 +1,33 @@
+import random
+import warnings
 import xarray as xr
 import dask.array as da
-import random
 from typing import (Sequence, Tuple)
-import warnings
 
 # add path, if mltools not installed
 import sys
 sys.path.append('../mltools')
 
 from mltools.cube_utilities import get_chunk_sizes
-
 warnings.filterwarnings('ignore')
 
 
-def rand(x: xr.Dataset):
-    """assign random split"""
-    da.random.seed(32)
-    res = ("time", "lat", "lon"), da.random.random((list(x.dims.values())), chunks=([v for k,v in get_chunk_sizes(x)])) < 0.8
-    print(res)
-    return res
+def assign_rand_split(ds: xr.Dataset, split: float = 0.8):
+    """Assign random split using random sampling."""
+    seed = 32  # Consistent seed for reproducibility
+    random.seed(seed)
+
+    # Ensure the random array matches the dimensions and chunk sizes of the input dataset
+    dimensions = tuple(ds.dims)  # Gets the dimensions from the dataset
+    chunk_sizes = tuple(ds.chunks[dim][0] for dim in ds.dims)  # Assumes the dataset is chunked
+
+    # Generate a random array with the same shape and chunking as the dataset
+    random_split = da.random.random(size=tuple(ds.dims[dim] for dim in dimensions), chunks=chunk_sizes) < split
+
+    # Assign the new data array to the dataset under the variable name 'split'
+    return ds.assign(split=(dimensions, random_split))
       
-    
+
 ### dask block sampling
 
 def cantor_pairing(x: int, y: int):
@@ -37,13 +44,13 @@ def cantor_tuple(index_list: list):
     return t
 
 
-def assign_block_split(x: xr.Dataset, block_size: Sequence[Tuple[str, int]] = None, split: float = 0.8):
+def assign_block_split(ds: xr.Dataset, block_size: Sequence[Tuple[str, int]] = None, split: float = 0.8):
     """Block sampling: add a variable "split" to xarray x, that contains blocks filled with 0 or 1 with frequency split
     Usage:
     xds = xr.open_zarr("***.zarr")
     cube_with_split = assign_block_split(xds, block_size=[("time", 10), ("lat", 20), ("lon", 20)], split=0.5)"""
     if block_size is None:
-        block_size = get_chunk_sizes(x)
+        block_size = get_chunk_sizes(ds)
 
     def role_dice(x, block_id=None):
         if block_id is not None:
@@ -58,7 +65,7 @@ def assign_block_split(x: xr.Dataset, block_size: Sequence[Tuple[str, int]] = No
         mapped = block_ind_array.map_blocks(role_dice)
         return ("time", "lat", "lon"), mapped
 
-    return x.assign({"split": block_rand})
+    return ds.assign({"split": block_rand})
   
 
        
