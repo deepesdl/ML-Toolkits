@@ -13,7 +13,7 @@ from scipy import interpolate
 import random
 import scipy
 import sys
-sys.path.append('../mltools')
+sys.path.append('..')
 
 
 """

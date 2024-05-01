@@ -5,7 +5,7 @@ import time
 import numpy as np
 import xarray as xr
 import sys
-sys.path.append('../mltools')
+sys.path.append('..')
 
 """
 In this file we slice a specific dimensions (e.g. area and time range) from the data cube with the values for the specified variable.
