@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 def plot_geo_data(
         df, column_to_plot, title='Geographic Plot', label='Geographic Plot [K]', color_map='viridis',
-        save_fig=False, file_name='plot.png', fig_size=(15, 10), edge_color='black',
+        save_fig=False, file_name='plot.png', fig_size=(15, 10), edge_color='black', base_map='naturalearth_lowres',
         marker='o', vmin=None, vmax=None, ticks=None):
     """
     Plots geographic data from a DataFrame with a base map for context.
@@ -38,7 +38,7 @@ def plot_geo_data(
         legend_kwds['ticks'] = ticks
 
     # Load the world map
-    world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+    world = gpd.read_file(gpd.datasets.get_path(base_map))
 
     # Plotting
     ax = world.plot(figsize=fig_size, color='white', edgecolor=edge_color)
