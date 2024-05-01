@@ -14,6 +14,7 @@
 ### Changed
 - The `data_processing` module of the `mltools` package has been renamed to `statistics` to more accurately reflect its purpose and functionality.
 - Updated use cases in the `Examples` directory now utilize the `plot_geo_data` function for enhanced visualization of geographic data.
+- Revision of Examples: Updated Python examples for `sklearn`, `PyTorch`, and `TensorFlow` to be compatible with the current versions of these packages.
 
 ### Improved
 - Streamlined the Conda (and pip) package creation process to facilitate faster and more efficient package builds with Miniconda.
