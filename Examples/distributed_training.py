@@ -7,10 +7,6 @@ import torch
 import numpy as np
 from torch.utils.data import TensorDataset
 
-# add path, if mltools not installed
-import sys
-sys.path.append('../mltools')
-
 from mltools.cube_utilities import get_chunk_sizes
 from mltools.training.pytorch_distributed import ddp_init, dist_train, Trainer
 from mltools.datasets import prepare_dataloader, XrDataset
