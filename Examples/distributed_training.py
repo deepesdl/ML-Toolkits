@@ -12,7 +12,7 @@ import sys
 sys.path.append('../mltools')
 
 from mltools.cube_utilities import get_chunk_sizes
-from mltools.training.pt_distributed_training import ddp_init, dist_train, Trainer
+from mltools.training.pytorch_distributed import ddp_init, dist_train, Trainer
 from mltools.datasets import prepare_dataloader, XrDataset
 from mltools.data_assignment import assign_block_split
 from mltools.statistics import standardize, get_statistics
