@@ -1,17 +1,25 @@
-from xcube.core.store import new_data_store
-from global_land_mask import globe
-import dask.array as da
-import xarray as xr
-from torch import nn
 import torch
 import numpy as np
+import xarray as xr
+import dask.array as da
+from torch import nn
+from global_land_mask import globe
 from torch.utils.data import TensorDataset
-
+from xcube.core.store import new_data_store
+from ml4xcube.datasets.xr_dataset import XrDataset
 from ml4xcube.cube_utilities import get_chunk_sizes
-from ml4xcube.training.pytorch_distributed import ddp_init, dist_train, Trainer
-from ml4xcube.datasets import prepare_dataloader, XrDataset
 from ml4xcube.data_assignment import assign_block_split
 from ml4xcube.statistics import standardize, get_statistics
+from ml4xcube.datasets.pytorch_xr import prepare_dataloader
+from ml4xcube.training.pytorch_distributed import ddp_init, dist_train, Trainer
+
+
+# To utilize ml4xcube for distributed training, use the following command with torchrun to initiate the process:
+#
+# torchrun --standalone --nproc_per_node=<number_of_processes> distributed_training.py <epochs>
+#
+# Replace `<number_of_processes>` with the number of processes you wish to run per node,
+# and `<epochs>` with the total number of training epochs.
 
 
 def preprocess_data(ds: xr.Dataset):
