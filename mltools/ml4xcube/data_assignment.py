@@ -3,12 +3,7 @@ import warnings
 import xarray as xr
 import dask.array as da
 from typing import (Sequence, Tuple)
-
-# add path, if mltools not installed
-import sys
-sys.path.append('../mltools')
-
-from mltools.cube_utilities import get_chunk_sizes
+from ml4xcube.cube_utilities import get_chunk_sizes
 warnings.filterwarnings('ignore')
 
 

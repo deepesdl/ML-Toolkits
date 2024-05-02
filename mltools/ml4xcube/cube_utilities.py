@@ -1,8 +1,8 @@
 import itertools
-from typing import Sequence, Tuple, Iterator, Dict
 import rechunker
 import numpy as np
 import xarray as xr
+from typing import Sequence, Tuple, Iterator, Dict
 
 
 def get_chunk_sizes(ds: xr.Dataset) -> Sequence[Tuple[str, int]]:
