@@ -7,11 +7,11 @@ import torch
 import numpy as np
 from torch.utils.data import TensorDataset
 
-from mltools.cube_utilities import get_chunk_sizes
-from mltools.training.pytorch_distributed import ddp_init, dist_train, Trainer
-from mltools.datasets import prepare_dataloader, XrDataset
-from mltools.data_assignment import assign_block_split
-from mltools.statistics import standardize, get_statistics
+from ml4xcube.cube_utilities import get_chunk_sizes
+from ml4xcube.training.pytorch_distributed import ddp_init, dist_train, Trainer
+from ml4xcube.datasets import prepare_dataloader, XrDataset
+from ml4xcube.data_assignment import assign_block_split
+from ml4xcube.statistics import standardize, get_statistics
 
 
 def preprocess_data(ds: xr.Dataset):
