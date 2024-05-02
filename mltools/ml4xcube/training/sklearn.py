@@ -1,7 +1,6 @@
 import joblib
 import numpy as np
 from typing import Union, Tuple
-from torch.utils.data import DataLoader
 from sklearn.metrics import mean_squared_error
 
 
@@ -12,8 +11,8 @@ class Trainer:
 
     Attributes:
         model: A scikit-learn estimator that supports partial_fit.
-        train_data (Union[DataLoader, Tuple[np.ndarray, np.ndarray]]): DataLoader for batch training or a tuple of numpy arrays (X_train, y_train).
-        test_data (Union[DataLoader, Tuple[np.ndarray, np.ndarray]], optional): DataLoader for batch validation/testing or a tuple of numpy arrays (X_test, y_test).
+        train_data (Union[DataLoader, Tuple[np.ndarray, np.ndarray]]): PyTorch DataLoader for batch training or a tuple of numpy arrays (X_train, y_train).
+        test_data (Union[DataLoader, Tuple[np.ndarray, np.ndarray]]): PyTorch DataLoader for batch validation/testing or a tuple of numpy arrays (X_test, y_test).
         metrics (list, optional): A list of functions that compute a metric between predictions and true values.
         model_path (str, optional): Path to save the best model.
         batch_training (bool): Whether to use batch training; if False, the model will be trained on complete data at once.
@@ -23,8 +22,8 @@ class Trainer:
     def __init__(
             self,
             model,
-            train_data: Union[DataLoader, Tuple[np.ndarray, np.ndarray]],
-            test_data: Union[DataLoader, Tuple[np.ndarray, np.ndarray]],
+            train_data,
+            test_data,
             metrics: list = [mean_squared_error],
             model_path: str = None,
             batch_training: bool = True,
