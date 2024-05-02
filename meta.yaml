@@ -1,5 +1,5 @@
-{% set name = "mltools" %}
-{% set version = "0.2.0" %}
+{% set name = "ml4xcube" %}
+{% set version = "0.0.4" %}
 
 package:
   name: "{{ name|lower }}"
@@ -10,7 +10,7 @@ source:
 
 build:
   noarch: python
-  # Change the directory to the mltools directory before running pip install
+  # Change the directory to the ml4xcube directory before running pip install
   script: "{{ PYTHON }} -m pip install . --no-deps -vv"
 
 
@@ -18,10 +18,13 @@ requirements:
   host:
     - python >=3.8
     - pip
+  run:
+    - python >=3.8
+    - conda-forge::xcube
 
 test:
   imports:
-    - mltools
+    - ml4xcube
 
 about:
   home: https://github.com/deepesdl/ML-Toolkits/tree/develop/mltools
