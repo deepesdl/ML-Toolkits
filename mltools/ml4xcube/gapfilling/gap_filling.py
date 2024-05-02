@@ -1,19 +1,20 @@
 import os
-import numpy as np
-from sklearn.svm import SVR
-import pandas as pd
-from sklearn import preprocessing
-from sklearn.model_selection import KFold, cross_val_score
-import shutil
-from multiprocessing.dummy import Pool
-import multiprocessing as mp
-import time
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
-from scipy import interpolate
-import random
-import scipy
 import sys
-sys.path.append('..')
+import time
+import scipy
+import random
+import shutil
+import numpy as np
+import pandas as pd
+import multiprocessing as mp
+from tqdm import tqdm
+from sklearn.svm import SVR
+from scipy import interpolate
+from sklearn import preprocessing
+from multiprocessing.dummy import Pool
+from sklearn.model_selection import KFold, cross_val_score
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+
 
 
 """
@@ -60,6 +61,12 @@ class Gapfiller:
         self.get_arrays()
         self.make_directory()
 
+        gap_size_print = [str(float(g) * 100) + "%" for g in list(self.data_with_gaps.keys())]
+        if len(self.data_with_gaps) == 1:
+            print(f"Fill the gaps of 1 matrix saved in /{self.directory}: {gap_size_print}")
+        else:
+            print(f"Fill the gaps of {len(gap_size_print)} matrices saved in /{self.directory}: {gap_size_print}")
+
         # Loop through different gap sizes
         for gap_size in self.data_with_gaps:
             start_time = time.time()
@@ -92,18 +99,25 @@ class Gapfiller:
                     self.temp_array_with_gaps).sum()
 
             # Use parallel processing to fill gaps for each pixel in the gap_indices
-            for gap_pred_score in self.pool.map(self.pixel_model, gap_indices):
-                gap_index = gap_pred_score[0]
-                # Update the filled_array with the predicted values for the current pixel
-                filled_array[gap_index[0], gap_index[1]] = gap_pred_score[1]
-                # Append actual and cross validation scores to their respective lists
-                actual_scores.append(gap_pred_score[2])
-                validation_scores.append(gap_pred_score[3])
+            with self.pool as pool:
+                results = pool.imap(self.pixel_model, gap_indices)
+                # process the progress within a status bar
+                with tqdm(total=len(gap_indices), file=sys.stdout, colour='GREEN',
+                          bar_format='{l_bar}{bar:20}{r_bar}') as pbar:
+                    for gap_pred_score in results:
+                        gap_index = gap_pred_score[0]
+                        # Update the filled_array with the predicted values for the current pixel
+                        filled_array[gap_index[0], gap_index[1]] = gap_pred_score[1]
+                        # Append actual and cross validation scores to their respective lists
+                        actual_scores.append(gap_pred_score[2])
+                        validation_scores.append(gap_pred_score[3])
+                        pbar.update(1)
 
             # Process and print results for the current gap size
             self.process_results(gap_size, filled_array, actual_scores, validation_scores, start_time)
             # Close the pool of worker processes
             self.pool.close()
+        print(f"The missing values of the gaps are now filled. You can find the results in /{self.directory}Results/")
 
     def get_arrays(self):
         """
@@ -238,8 +252,8 @@ class Gapfiller:
         if prediction is None:
             prediction = self.interpolation(gap_index)
             validation_score = "not available"
-        elif type(prediction) == np.ndarray:
-            prediction = prediction[0]  # Extract the value if it's within an array
+        else:
+            prediction = prediction.item()
 
         if self.actual_matrix is not None:
             actual_value = self.actual_matrix[gap_index[0], gap_index[1]]

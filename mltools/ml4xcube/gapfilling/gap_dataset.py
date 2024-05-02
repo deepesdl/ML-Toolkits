@@ -1,11 +1,11 @@
-import datetime
 import os
-import shutil
+import sys
 import time
+import shutil
+import datetime
 import numpy as np
 import xarray as xr
-import sys
-sys.path.append('..')
+from tqdm import tqdm
 
 """
 In this file we slice a specific dimensions (e.g. area and time range) from the data cube with the values for the specified variable.
@@ -114,13 +114,11 @@ class GapDataset:
 
         # Initialize a dictionary to track data quality
         quality = {'complete': 0, 'empty': 0, 'gaps': 0}
-        count = 0
         print("No of files:", len(self.sliced_ds.time))
 
-        # Iterate through each time step in the sliced area
-        for t in self.sliced_ds.time:
-            count += 1
-            print(count, "/", len(self.sliced_ds.time))
+        # Iterate through each time step in the sliced area and track process with a status bar
+        for t in tqdm(self.sliced_ds.time, file=sys.stdout, colour='GREEN',
+                      bar_format='{l_bar}{bar:20}{r_bar}{bar:-20b}'):
 
             # Extract data for the current time step and convert it to a NumPy array
             new_ds = self.sliced_ds.sel(time=t.data).to_numpy()
@@ -237,6 +235,7 @@ class GapDataset:
             gap_creation_count += 1
 
         print(gap_creation_count, "arrays with gaps were created!")
+        print(f"These arrays are saved in /{self.directory}")
 
 
 class EarthSystemDataCubeS3(GapDataset):
