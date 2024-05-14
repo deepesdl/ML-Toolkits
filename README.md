@@ -1,12 +1,16 @@
-# ML-Toolkits
+# ml4xcube: Machine Learning Toolkits for Data Cubes
 
-The ML Toolkits provide a set of best practice Python-based Jupyter Notebooks that showcase the implementation of the three start-of-the-art Machine Learning libraries (1) scikit-learn, (2) PyTorch and (3) TensorFlow based on the Earth System Data Cube.
+Welcome to `ml4xcube`, a comprehensive Python-based toolkit designed for researchers and developers in the field of machine learning with an emphasis on `xarray` data cubes. Our toolkit is engineered to provide specialized and robust support for data cube management and analysis, operating with the state-of-the-art machine learning libraries (1) `scikit-learn`, (2) `PyTorch` and (3) `TensorFlow`. 
 
 ## Installation
 
-You can install `ml4xcube` directly via pip:
+Get started with `ml4xcube` effortlessly by installing it directly through pip:
 ```bash
 pip install ml4xcube
+```
+or Conda:
+```bash
+conda install -c conda-forge ml4xcube
 ```
 
 Make sure you have Python version 3.8 or higher.
@@ -24,7 +28,7 @@ If you're planning to use `ml4xcube` with TensorFlow or PyTorch, set up these fr
 
 ## Usage
 
-To use ml4xcube in your project, simply import the necessary module:
+To use `ml4xcube` in your project, simply import the necessary module:
 
 ```python
 from ml4xcube.statistics import normalize, standardize
@@ -56,4 +60,4 @@ reg_model = trainer.train()
 
 ## License
 
-ml4xcube is released under the MIT License. See the [LICENSE](https://github.com/deepesdl/ML-Toolkits/blob/master/LICENSE) file for more details.
+`ml4xcube` is released under the MIT License. See the [LICENSE](https://github.com/deepesdl/ML-Toolkits/blob/master/LICENSE) file for more details.
