@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ml4xcube"
-version = "0.0.4"
+version = "0.0.6"
 dynamic = ["dependencies"]
 description = "ML package for data cubes"
 authors = [{ name = "Julia Peters", email = "julia.peters@informatik.uni-leipzig.de" }]
