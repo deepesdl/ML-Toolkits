@@ -3,8 +3,8 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mltools"
-version = "0.2.0"
+name = "ml4xcube"
+version = "0.0.6"
 dynamic = ["dependencies"]
 description = "ML package for data cubes"
 authors = [{ name = "Julia Peters", email = "julia.peters@informatik.uni-leipzig.de" }]
@@ -16,4 +16,7 @@ classifiers = [
     # Other relevant classifiers can be included here
 ]
 requires-python = ">=3.8"
+
+[tool.setuptools.package-data]
+ml4xcube = ["gapfilling/helper/*"]
 

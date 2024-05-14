@@ -1,8 +1,8 @@
 import itertools
-from typing import Sequence, Tuple, Iterator, Dict
 import rechunker
 import numpy as np
 import xarray as xr
+from typing import Sequence, Tuple, Iterator, Dict
 
 
 def get_chunk_sizes(ds: xr.Dataset) -> Sequence[Tuple[str, int]]:
@@ -102,6 +102,7 @@ def get_chunk_by_index(ds: xr.Dataset, index: int, block_sizes: Sequence[Tuple[s
         var_blocks[var_name] = var.isel(indexers).values
 
     return var_blocks
+
 
 def rechunk_cube(source_cube: xr.DataArray, target_chunks: dict | tuple | list, target_path: str):
     """

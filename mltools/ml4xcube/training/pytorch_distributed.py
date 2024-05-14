@@ -1,8 +1,6 @@
-from typing import Callable
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from time import time
 from torch.distributed.elastic.multiprocessing.errors import record
-from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import torch.distributed as dist
@@ -18,32 +16,6 @@ def ddp_init():
     """
     init_process_group(backend="nccl")
     torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
-
-
-def prepare_dataloader(dataset: Dataset, batch_size: int, callback_fn: Callable = None, num_workers: int = 0) -> DataLoader:
-
-    """
-    Prepares a DataLoader for distributed training.
-    Applies a DistributedSampler to sample the dataset across multiple processes.
-
-    Parameters:
-    - dataset: The dataset from which to load the data.
-    - batch_size: How many samples per batch to load.
-    - callback_fn: A function used to collate data into batches.
-    - num_workers: How many subprocesses to use for data loading.
-
-    Returns:
-    A DataLoader object configured for distributed training.
-    """
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=True,  # Optimizes memory pinning for faster data transfer to CUDA devices
-        shuffle=False,  # Disabled since DistributedSampler shuffles data
-        collate_fn=callback_fn,
-        sampler=DistributedSampler(dataset)  # Ensures each process gets a different slice of the dataset
-    )
 
 
 class Trainer:
@@ -146,8 +118,8 @@ class Trainer:
             with torch.set_grad_enabled(True):
                 inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
                 loss = self._run_batch(inputs, targets)
-            running_loss += loss.item() * batch.size(0) * batch.size(1)
-            running_size += batch.size(0) * batch.size(1)
+            running_loss += loss.item() * batch.size(0)
+            running_size += batch.size(0)
 
         avg_epoch_loss = running_loss / running_size
         if self.gpu_id == 0:
@@ -165,10 +137,16 @@ class Trainer:
         running_size = 0
 
         for batch in self.test_data:
+            if self.task_type == 'supervised':
+                inputs, targets = batch
+            elif self.task_type == 'reconstruction':
+                inputs = batch
+                targets = inputs
             with torch.no_grad():  # No need to track gradients during validation
-                loss = self._run_batch(batch)
-            running_loss += loss.item() * batch.size(0) * batch.size(1)
-            running_size += batch.size(0) * batch.size(1)
+                inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
+                loss = self._run_batch(inputs, targets)
+            running_loss += loss.item() * batch.size(0)
+            running_size += batch.size(0)
 
         # Convert running loss and size to tensors for all_reduce operation
         running_loss_tensor = torch.tensor([running_loss], device=self.gpu_id)

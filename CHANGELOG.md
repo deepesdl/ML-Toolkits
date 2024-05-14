@@ -1,6 +1,36 @@
 # Changelog
 
-## 0.2.0 - [2024-04-11]
+## [0.0.*] - 2024-05-14
+
+### Added
+- `training` module:
+  - Trainer classes for `sklearn`, `PyTorch`, and `TensorFlow` to improve usability.
+  - `pytorch_distributed.py` for distributed machine learning (originally `distributed_training.py`).
+- `datasets` module:
+  - `XrDataset` for smaller `xarray` data manageable in memory.
+  - `LargeScaleXrDataset` for `PyTorch` and `TensorFlow` to handle large datasets by iterating over (batches of) chunks.
+  - Enabled batch training (partial fit) for the `training.sklearn` trainer class using both `LargeScaleXrDataset` (from `datasets.pytorch_xr`) or `XrDataset`, integrated with a `PyTorch` data loader.
+  - Configuration options  for `XrDataset` and both `LargeScaleXrDataset` to select training data
+  - `prepare_dataloader` method for `PyTorch` and `prepare_dataset` for `TensorFlow` to configure data processing during training (e.g., batch size, distributed training).
+- `preprocessing.py` module with methods:
+  - `apply_filter` for filtering training data based on a filter variable contained in the dataset.
+  - `drop_nan_values` to remove data points containing any NaN values.
+- Published the `ml4xcube` package (v0.0.6) on PyPI and Conda-forge.
+
+### Changed
+- Renamed `mltools` to `ml4xcube` due to name conflict.
+- Updated `gapfilling` module:
+  - Added a progress bar to visualize progress during gap filling.
+  - Updated final print statement to show the location of gap-filled data.
+- Renamed `rand` method to `assign_rand_split` in `data_assignment` module and unified its usage with `assign_block_split` to improve usability.
+- Updated the use cases withing the `Examples` directory to demonstrate new / edited functionalities.
+- Renamed module `distributed_training`  to `pytorch_distributed`
+
+### Removed
+- Removed `torch_training` module including the containing methods `train_one_epoch` and `test`.
+
+## [Unreleased] - 2024-04-11
+
 ### Added
 - New functionality for gap filling in datasets, implemented in the `gap_dataset.py` and `gap_filling.py` scripts within the `mltools` package. This includes:
     - The `GapDataset` class for handling datasets with data gaps, enabling the slicing of specific dimensions and the addition of artificial gaps for testing gap-filling algorithms.
@@ -19,14 +49,14 @@
 ### Improved
 - Streamlined the Conda (and pip) package creation process to facilitate faster and more efficient package builds with Miniconda.
 
-## 0.1.0 - [2024-03-13]
+##  [Unreleased] - 2024-03-13
 
 ### Added
 - Transformed `mltools.py` into a Python package with modules: `cube_utilities.py`, `data_processing.py`, `torch_training.py`, `sampling.py`.
 - New functions integrated into the corresponding modules based on functionality.
 - Two new methods in `cube_utilities.py`:
   - `get_chunk_by_index` for retrieving data cube chunks by index.
-  - `rechunk_cube` for rechunking the data cube.
+  - `rechunk_cube` for re-chunking the data cube.
 - `distributed_training.py` added to the `mltools` package for PyTorch distributed training.
 - Corresponding `distributed_training.py` example added to the `Examples` directory for practical use.
 - Pip packaging support with the `pip_env` directory, including `setup.py` and `requirements.txt`.
