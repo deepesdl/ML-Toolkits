@@ -35,6 +35,11 @@ def preprocess_data(ds: xr.Dataset):
     X_train, X_test = X[ds['split'] == True], X[ds['split'] == False]
     y_train, y_test = y[ds['split'] == True], y[ds['split'] == False]
 
+    X_train = X_train.reshape(-1, 1)  # Making it [num_samples, 1]
+    y_train = y_train.reshape(-1, 1)
+    X_test = X_test.reshape(-1, 1)
+    y_test = y_test.reshape(-1, 1)
+
     return X_train, X_test, y_train, y_test
 
 
