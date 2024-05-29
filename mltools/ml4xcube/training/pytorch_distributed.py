@@ -116,10 +116,11 @@ class Trainer:
                 targets = inputs  # For reconstruction tasks, inputs are used as targets
             start_time = time()
             with torch.set_grad_enabled(True):
+                if inputs.numel() == 0: continue
                 inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
                 loss = self._run_batch(inputs, targets)
-            running_loss += loss.item() * batch.size(0)
-            running_size += batch.size(0)
+            running_loss += loss.item() * len(inputs)
+            running_size += len(inputs)
 
         avg_epoch_loss = running_loss / running_size
         if self.gpu_id == 0:
@@ -143,14 +144,17 @@ class Trainer:
                 inputs = batch
                 targets = inputs
             with torch.no_grad():  # No need to track gradients during validation
+                if inputs.numel() == 0: continue
                 inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
                 loss = self._run_batch(inputs, targets)
-            running_loss += loss.item() * batch.size(0)
-            running_size += batch.size(0)
+            running_loss += loss.item() * len(inputs)
+            running_size += len(inputs)
 
         # Convert running loss and size to tensors for all_reduce operation
         running_loss_tensor = torch.tensor([running_loss], device=self.gpu_id)
         running_size_tensor = torch.tensor([running_size], device=self.gpu_id)
+
+        dist.barrier()
 
         # Use dist.all_reduce to sum the losses and sizes from all GPUs
         dist.all_reduce(running_loss_tensor, op=dist.ReduceOp.SUM)
