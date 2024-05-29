@@ -7,6 +7,7 @@ import shutil
 import numpy as np
 import pandas as pd
 import multiprocessing as mp
+import xarray as xr
 from tqdm import tqdm
 from sklearn.svm import SVR
 from scipy import interpolate
@@ -26,93 +27,85 @@ So far only Support Vector Regression is tested but other ML algorithms, hyperpa
 
 class Gapfiller:
     """
-    The Gapfiller class fills gaps in data using machine learning models.
-    It supports different hyperparameter search methods and predictor strategies.
+    The Gapfiller class fills gaps in cube data using machine learning models.
+    It provides methods for data preprocessing, hyperparameter tuning, cross-validation, and prediction.
 
     Parameters:
-    - ds_name (str): The name of the dataset.
-    - hyperparameters (str): Hyperparameter search method ('RandomGridSearch' | 'FullGridSearch' | 'Custom').
-    - predictor (str): Predictor strategy ('AllPoints' | 'LCC' | 'RandomPoints').
+        ds_name (str): The name of the dataset.
+        learning_function (str): The type of learning function.
+        hyperparameters (str): Hyperparameter search method ('RandomGridSearch' | 'FullGridSearch' | 'Custom').
+        predictor (str): Predictor strategy ('AllPoints' | 'LCC' | 'RandomPoints').
+
+    Attributes:
+        actual_matrix (np.ndarray): The actual data matrix with gaps.
+        data_with_gaps (dict): A dictionary containing data matrices with different gap sizes.
+        directory (str): The directory where results and data are stored.
+        gap_value (float): The gap value in the data (np.nan for real gaps and -100 for artificial gaps).
+        metadata (dict): Metadata associated with the dataset.
+        pool (multiprocessing.dummy.Pool): A pool of worker processes for parallelization.
+        scores (dict): Dictionary to store MAE scores for gap filling results.
+        temp_array_with_gaps (np.ndarray): Temporary data array with gaps for gap filling.
+        temp_known_pixels (int): Number of known pixels in the temporary data array.
+        training_data (ndarray): Historical data matrices.
+
+    Methods:
+    - gapfill(): Perform the gap filling process using the learning function for different gap sizes.
+    - get_arrays(): Retrieve data arrays and initialize necessary variables.
+    - print_insights(): Print insights about the gap-filling process.
+    - process_gap_array(gap_size): Process the gap-filling process for different gap sizes.
+    - fill_the_gaps(gap_indices): Fill the gaps in the data array using a pixel model.
+    - pixel_model(gap_index): Predict missing values for a specific pixel based on the chosen predictor.
+    - create_dataframe(coords): Create a dataframe from selected coordinates.
+    - get_random_points(): Get random non-gap coordinates for use as predictors.
+    - get_extra_matrix_points(gap_index): Get coordinates based on Land Cover Classification (LCC) for modeling.
+    - preprocess_dataframe(dataframe): Preprocess the dataframe, handling NaN values and cloud-covered areas.
+    - get_train_test_sets(dataframe): Split the dataframe into training and testing sets.
+    - process_results(gap_size, filled_array, actual_scores, validation_scores, start_time): Process and print gap filling results.
+    - train_model(X_train, y_train, X_test): Perform SVR training, hyperparameter tuning, and prediction.
+    - interpolation(gap_index): Perform nearest neighbor interpolation for gap filling.
+
+    Example:
+    ```
+    Gapfill(ds_name='Test123', learning_function='SVR' hyperparameters='RandomGridSearch', predictor='LCC').gapfill()
+    ```
     """
-    def __init__(self, ds_name="Test123", hyperparameters="RandomGridSearch", predictor="RandomPoints"):
+    def __init__(self, ds_name="Test123", learning_function="SVR", hyperparameters="RandomGridSearch", predictor="RandomPoints"):
         self.ds_name = ds_name
+        self.learning_function = learning_function
+        self.hyperparameters = hyperparameters
+        self.predictor = predictor
+
         self.actual_matrix = None
-        self.date = None
         self.data_with_gaps = {}
         self.directory = os.path.dirname(os.getcwd()) + '/application_results/' + ds_name + "/" if \
             os.getcwd().split('/')[-1] != 'gapfilling' else 'application_results/' + ds_name + "/"
         self.gap_value = np.nan
-        self.historical_data = None
-        self.hyperparameters = hyperparameters
         self.metadata = {}
-        self.predictor = predictor
         self.pool = None
         self.scores = {}
-        self.temp_array_with_gaps = None
+        self.temp_gap_array = None
         self.temp_known_pixels = None
-        self.runtimes = {}
+        self.training_data = []
 
     def gapfill(self):
         """
         Fill gaps in the data using machine learning models.
         The method fills each gap by building a model individually.
         """
-        # Retrieve data arrays and create a directory for results
+        # Retrieve and organize the data arrays
         self.get_arrays()
-        self.make_directory()
-
-        gap_size_print = [str(float(g) * 100) + "%" for g in list(self.data_with_gaps.keys())]
-        if len(self.data_with_gaps) == 1:
-            print(f"Fill the gaps of 1 matrix saved in /{self.directory}: {gap_size_print}")
-        else:
-            print(f"Fill the gaps of {len(gap_size_print)} matrices saved in /{self.directory}: {gap_size_print}")
+        # Create a directory or clean it if it already exists
+        shutil.rmtree(self.directory + "Results/", ignore_errors=True)
+        os.makedirs(self.directory + "Results/", exist_ok=True)
+        self.print_insights()
 
         # Loop through different gap sizes
         for gap_size in self.data_with_gaps:
             start_time = time.time()
-            # Calculate the number of gap pixels
-            gap_size_pixel = int(float(gap_size) * self.historical_data.shape[1] * self.historical_data.shape[2])
-            print(f"date: {self.date} \ngap size: {float(gap_size) * 100} % "
-                  f"-> {gap_size_pixel} pixel \ntraining pictures: {self.historical_data.shape[0]}")
-
-            # Set the current data array with gaps for gap filling as class variable
-            self.temp_array_with_gaps = self.data_with_gaps[gap_size]
-            # Create a pool of worker processes for parallelization
+            gap_indices = self.process_gap_array(gap_size)
+            # Create pool of worker for parallelization and use parallel processing to fill gaps for each pixel
             self.pool = Pool(mp.cpu_count())
-            # Find indices of pixels with gaps in the current data array
-            if np.isnan(self.gap_value):
-                gap_indices = np.argwhere(np.isnan(self.temp_array_with_gaps))
-            else:
-                gap_indices = np.argwhere(self.temp_array_with_gaps == self.gap_value)
-            # Create a copy of the data array to fill gaps
-            filled_array = np.copy(self.temp_array_with_gaps)
-            # Lists to store actual and validation scores for each pixel
-            actual_scores = []
-            validation_scores = []
-            all_pixels = self.temp_array_with_gaps.size
-
-            # Calculate the number of known pixels (non-artificial-gap and non-NaN-value)
-            if np.isnan(self.gap_value):
-                self.temp_known_pixels = all_pixels - np.isnan(self.temp_array_with_gaps).sum()
-            else:
-                self.temp_known_pixels = all_pixels - (self.temp_array_with_gaps == self.gap_value).sum() - np.isnan(
-                    self.temp_array_with_gaps).sum()
-
-            # Use parallel processing to fill gaps for each pixel in the gap_indices
-            with self.pool as pool:
-                results = pool.imap(self.pixel_model, gap_indices)
-                # process the progress within a status bar
-                with tqdm(total=len(gap_indices), file=sys.stdout, colour='GREEN',
-                          bar_format='{l_bar}{bar:20}{r_bar}') as pbar:
-                    for gap_pred_score in results:
-                        gap_index = gap_pred_score[0]
-                        # Update the filled_array with the predicted values for the current pixel
-                        filled_array[gap_index[0], gap_index[1]] = gap_pred_score[1]
-                        # Append actual and cross validation scores to their respective lists
-                        actual_scores.append(gap_pred_score[2])
-                        validation_scores.append(gap_pred_score[3])
-                        pbar.update(1)
-
+            filled_array, actual_scores, validation_scores = self.fill_the_gaps(gap_indices)
             # Process and print results for the current gap size
             self.process_results(gap_size, filled_array, actual_scores, validation_scores, start_time)
             # Close the pool of worker processes
@@ -123,62 +116,130 @@ class Gapfiller:
         """
         Retrieve and organize data arrays needed for gap filling.
 
-        This method loads historical data, the actual data matrix and if artificial gaps were created,
+        This method loads historical data as training data, the actual data matrix and if artificial gaps were created,
         data with gaps for different gap sizes. It prepares these arrays for the gap filling process.
 
         Returns:
-        None
+            None
         """
-        file_suffix = "actual_matrix.npy"
-        actual_matrix = [file for file in os.listdir(self.directory) if file.endswith(file_suffix)][0]
-        self.date = actual_matrix.split("_")[0]
-        actual_matrix = np.load(self.directory + actual_matrix)
+        # Open the cube and identify the variables
+        self.actual_matrix = xr.open_dataset(self.directory + "actual.nc")
+        actual_date = np.datetime_as_string(self.actual_matrix.time, unit='D')
         gap_imitation_directory = self.directory + "GapImitation/"
+        variable = [v for v in list(self.actual_matrix.variables) if v not in ["lat", "lon", "time"]][0]
 
+        # Load and process gap imitation arrays if they exist
         if os.path.exists(gap_imitation_directory):
+            # Set gap value to distinguish from nans
             self.gap_value = -100
-            self.actual_matrix = actual_matrix
-            files = [file for file in os.listdir(gap_imitation_directory)]
-            files.sort()
-            gap_dates = []
-
+            files = sorted(os.listdir(gap_imitation_directory))
+            # Process the arrays and gap sizes
             for file in files:
-                gap_size = file[:-4].split("_")[-1]
-                self.data_with_gaps[gap_size] = np.load(gap_imitation_directory + file)
-                gap_date = file[:-4].split("_")[0]
-                if gap_date not in gap_dates:
-                    gap_dates.append(gap_date)
+                gap_size = file[:-3].split("_")[-1]
+                self.data_with_gaps[gap_size] = xr.open_dataset(gap_imitation_directory + file)[variable].to_numpy()
         else:
-            gaps_absolute = np.isnan(actual_matrix).sum()
-            gap_size = round(gaps_absolute / actual_matrix.size, 3)
-            self.data_with_gaps[gap_size] = actual_matrix
-            self.actual_matrix = None
+            # Calculate the absolute and relative number of gaps (NaNs) in the variable and process it
+            gaps_absolute = np.isnan(self.actual_matrix[variable]).sum().item()
+            gap_size = round(gaps_absolute / self.actual_matrix[variable].size, 3)
+            self.data_with_gaps[gap_size] = self.actual_matrix[variable].to_numpy()
 
-        historical_data_directory = self.directory + "History/"
-        files = [file for file in os.listdir(historical_data_directory)]
-        historical_data = {}
+        # Open the data cube and extract data for each time step in the cube and save it in a NumPy array
+        cube = xr.open_dataset(self.directory + "cube.nc")
+        for t in cube.time:
+            # select the historical data as trainings data but avoid including the original array
+            if actual_date != np.datetime_as_string(t, unit='D'):
+                array = cube.sel(time=t.data)[variable].to_numpy()
+                self.training_data.append(array)
+        self.training_data = np.array(self.training_data)
 
-        for file in files:
-            historical_date = file[:-4].split("_")[0]
-            historical_data[historical_date] = np.load(historical_data_directory + file)
-
-        sorted_dates = sorted(historical_data.keys())
-        historical_data_sorted = {key: historical_data[key] for key in sorted_dates}
-        self.historical_data = np.array(list(historical_data_sorted.values()))
-
-    def make_directory(self):
+    def print_insights(self):
         """
-        Create a directory for storing gap filling results.
+        Print insights about the gap-filling process.
 
-        This method creates a directory to store the results of the gap filling process.
+        This method formats and prints the details about the gaps that were filled, including the number of arrays with
+        gaps, the size of the gaps, the directory where the filled arrays are saved, and the date of the actual matrix.
+
+        Args:
+            None
 
         Returns:
-        None
+            None
         """
-        directory = self.directory + "Results/"
-        if os.path.exists(directory):
-            shutil.rmtree(directory)
-        os.mkdir(directory)
+        formatted_gaps = [str(round(float(g) * 100, 1)) + "%" for g in list(self.data_with_gaps.keys())]
+        actual_date = np.datetime_as_string(self.actual_matrix.time, unit='D')
+        print(f"Fill the gaps of {len(formatted_gaps)} array(s) with the following gap size: {', '.join(formatted_gaps)}")
+        print(f"The array(s) are saved in: /{self.directory}")
+        print(f"Date: {actual_date} \n")
+
+    def process_gap_array(self, gap_size):
+        """
+        Process the gap array and return indices of gap pixels.
+
+        Args:
+            gap_size (float): percentage of the gap size
+
+        Returns:
+            gap_indices (ndarray): indices of gap pixels
+        """
+        # Calculate the number of gap pixels
+        gap_size_pixel = int(float(gap_size) * self.training_data[0].size)
+        print(f"gap size: {round(float(gap_size) * 100, 1)} % "
+              f"-> {gap_size_pixel} pixel \ntraining pictures: {self.training_data.shape[0]}")
+        # Set the current data array with gaps for gap filling as a class variable
+        self.temp_gap_array = self.data_with_gaps[gap_size]
+
+        # Calculate number of known pixels (non-artificial-gap and non-NaN-value)
+        if np.isnan(self.gap_value):
+            self.temp_known_pixels = self.temp_gap_array.size - np.isnan(self.temp_gap_array).sum()
+        else:
+            # If gap_value is not NaN, count all pixels that are neither gap_value nor NaN
+            self.temp_known_pixels = (self.temp_gap_array.size - (self.temp_gap_array == self.gap_value).sum()
+                                      - np.isnan(self.temp_gap_array).sum())
+
+        # Find indices of pixels with gaps (actual gaps or artificial gaps)
+        if np.isnan(self.gap_value):
+            gap_indices = np.argwhere(np.isnan(self.temp_gap_array))
+        else:
+            gap_indices = np.argwhere(self.temp_gap_array == self.gap_value)
+        return gap_indices
+
+    def fill_the_gaps(self, gap_indices):
+        """
+        Fill the gaps in the data array using a pixel model.
+
+        This method uses parallel processing to fill gaps for each pixel specified in the gap_indices.
+        It utilizes a pool of workers to predict values for each gap pixel and updates the data array
+        accordingly. It also tracks actual and validation scores.
+
+        Args:
+            gap_indices (ndarray): List of indices (tuples) specifying the positions of the gaps in the array.
+
+        Returns:
+                - filled_array (ndarray): The data array with gaps filled.
+                - actual_scores (list): List of actual scores for each filled pixel.
+                - validation_scores (list): List of validation scores for each filled pixel.
+        """
+        # Lists to store actual and validation scores for each pixel and a copy of the data array to fill gaps
+        actual_scores = []
+        validation_scores = []
+        filled_array = np.copy(self.temp_gap_array)
+
+        # Use parallel processing to fill gaps for each pixel in the gap_indices
+        with self.pool as pool:
+            results = pool.imap(self.pixel_model, gap_indices)
+            # Process the progress within a status bar
+            with tqdm(total=len(gap_indices), file=sys.stdout, colour='GREEN',
+                      bar_format='{l_bar}{bar:20}{r_bar}') as pbar:
+                for gap_pred_score in results:
+                    gap_index = gap_pred_score[0]
+                    # Update the filled_array with the predicted values for the current pixel
+                    filled_array[gap_index[0], gap_index[1]] = gap_pred_score[1]
+                    # Append actual and cross validation scores to their respective lists
+                    actual_scores.append(gap_pred_score[2])
+                    validation_scores.append(gap_pred_score[3])
+                    pbar.update(1)
+
+        return filled_array, actual_scores, validation_scores
 
     def pixel_model(self, gap_index):
         """
@@ -201,9 +262,9 @@ class Gapfiller:
         if self.predictor == "AllPoints":
             # Find all non-gap points
             if np.isnan(self.gap_value):
-                coords = np.argwhere(~np.isnan(self.temp_array_with_gaps))
+                coords = np.argwhere(~np.isnan(self.temp_gap_array))
             else:
-                coords = np.argwhere(self.temp_array_with_gaps != self.gap_value)
+                coords = np.argwhere(self.temp_gap_array != self.gap_value)
         elif self.predictor == "RandomPoints":
             coords = self.get_random_points()  # Get random non-gap points
         elif self.predictor == "LCC":
@@ -213,7 +274,7 @@ class Gapfiller:
         if type(coords) == str:
             prediction = self.interpolation(gap_index)
             validation_score = "not available"
-            if self.actual_matrix is not None:
+            if self.gap_value != -100:
                 actual_value = self.actual_matrix[gap_index[0], gap_index[1]]
                 actual_score = abs(actual_value - prediction)
             else:
@@ -246,7 +307,7 @@ class Gapfiller:
             validation_score = "not available"
         else:
             # Apply the learning function to predict the gap value and calculate the validation score
-            prediction, validation_score = self.learning_function(X_train, y_train, X_test)
+            prediction, validation_score = self.train_model(X_train, y_train, X_test)
 
         # Interpolate where there is no prediction
         if prediction is None:
@@ -255,8 +316,9 @@ class Gapfiller:
         else:
             prediction = prediction.item()
 
-        if self.actual_matrix is not None:
-            actual_value = self.actual_matrix[gap_index[0], gap_index[1]]
+        if self.gap_value == -100:
+            variable = [variable for variable in list(self.actual_matrix.variables) if variable not in ["lat", "lon", "time"]][0]
+            actual_value = self.actual_matrix[variable].data[gap_index[0], gap_index[1]]
             actual_score = abs(actual_value - prediction)
         else:
             actual_score = "not available"
@@ -278,15 +340,15 @@ class Gapfiller:
         # Convert the input coordinates to a numpy array for easy indexing
         coords = np.array(coords)
         # Create a dataframe with dimensions (number of historical data points + 1) x (number of coordinates)
-        dataframe = np.full((len(self.historical_data) + 1, len(coords)), 0.0)
+        dataframe = np.full((len(self.training_data) + 1, len(coords)), 0.0)
 
         # Iterate over each column (coordinate) in the dataframe
         for col_index in range(len(coords)):
             i, j = coords[col_index]  # Extract the row (i) and column (j) indices from the coordinates
             # Adding historical data for the predictor (pixel with indexes i,j) to the table
-            dataframe[:-1, col_index] = self.historical_data[:, i, j]
+            dataframe[:-1, col_index] = self.training_data[:, i, j]
             # Entering the data of this pixel for the target matrix (last row of the dataframe)
-            dataframe[-1, col_index] = self.temp_array_with_gaps[i, j]
+            dataframe[-1, col_index] = self.temp_gap_array[i, j]
 
         dataframe = pd.DataFrame(dataframe)
         return dataframe
@@ -302,8 +364,8 @@ class Gapfiller:
         list or str: A list of random non-gap coordinates if there are enough known pixels;
                      otherwise, a message indicating insufficient known pixels.
         """
-        n_strings = self.temp_array_with_gaps.shape[0]
-        n_columns = self.temp_array_with_gaps.shape[1]
+        n_strings = self.temp_gap_array.shape[0]
+        n_columns = self.temp_gap_array.shape[1]
         coords = []
 
         # Determine the maximum number of iterations based on the absolute number of known pixels
@@ -312,9 +374,9 @@ class Gapfiller:
         elif self.temp_known_pixels >= 50:
             # Use all known non-gap coordinates
             if np.isnan(self.gap_value):
-                coords = np.argwhere(~np.isnan(self.temp_array_with_gaps))
+                coords = np.argwhere(~np.isnan(self.temp_gap_array))
             else:
-                coords = np.argwhere(self.temp_array_with_gaps != self.gap_value)
+                coords = np.argwhere(self.temp_gap_array != self.gap_value)
             return coords
         else:
             return "Not enough known pixels - proceed with interpolation"
@@ -327,7 +389,7 @@ class Gapfiller:
             coordinates = [random_i, random_j]  # Create a coordinate pair [row, column]
 
             # Check if the value at the random coordinate is a gap
-            if np.isclose(self.temp_array_with_gaps[random_i, random_j], -100) or np.isclose(self.temp_array_with_gaps[random_i, random_j], np.nan):
+            if np.isclose(self.temp_gap_array[random_i, random_j], -100) or np.isclose(self.temp_gap_array[random_i, random_j], np.nan):
                 pass
             # Check if the coordinate already exists in the list
             elif any(tuple(coordinates) == tuple(element) for element in coords):
@@ -352,15 +414,15 @@ class Gapfiller:
         list or str: A list of coordinates based on LCC if there are enough coordinates within the same biome;
                      otherwise, a message indicating insufficient known pixels.
         """
-        extra_matrix = [file for file in os.listdir(self.directory) if file.startswith('extra_matrix')][0]
-        extra_matrix = np.load(self.directory + extra_matrix)
+        extra_matrix = xr.open_dataset(self.directory + "extra_matrix_lcc.nc")['lccs_class'].to_numpy()
+
         # Extract the LCC value for the pixel to be filled
         extra_code = extra_matrix[gap_index[0], gap_index[1]]
         # Create a copy of the LCC matrix with cloud-covered areas set to gap values
         if np.isnan(self.gap_value):
-            new_extra_matrix = np.where(np.isnan(self.temp_array_with_gaps), self.gap_value, extra_matrix)
+            new_extra_matrix = np.where(np.isnan(self.temp_gap_array), self.gap_value, extra_matrix)
         else:
-            new_extra_matrix = np.where(self.temp_array_with_gaps == self.gap_value, self.gap_value, extra_matrix)
+            new_extra_matrix = np.where(self.temp_gap_array == self.gap_value, self.gap_value, extra_matrix)
 
         # Find coordinates of points within the same LCC biome and not omitted
         coords = np.argwhere(new_extra_matrix == extra_code)
@@ -474,33 +536,37 @@ class Gapfiller:
         Returns:
         None
         """
-        npy_name = ''.join((self.date, '--', str(gap_size), '.npy'))
-        directory = self.directory + "Results/"
-        filled_matrix_npy = os.path.join(directory, npy_name)
-        np.save(filled_matrix_npy, filled_array)
+        filled_xr_array = xr.DataArray(
+            filled_array,
+            dims=self.actual_matrix.dims,
+            coords=self.actual_matrix.coords,
+            attrs=self.actual_matrix.attrs
+        )
 
-        # Calculate and round the mean absolute error (MAE) for actual scores
-        try:
+        actual_date = np.datetime_as_string(self.actual_matrix.time, unit='D')
+        filename = ''.join((actual_date, '-', str(gap_size), '.nc'))
+        filled_xr_array.to_netcdf(self.directory + "Results/" + filename)
+
+        # Calculate and round the mean absolute error (MAE) for actual scores if true matrix exists
+        if os.path.exists(self.directory + "GapImitation/"):
             actual_scores = np.array(actual_scores)
             mean_actual_score = round(np.mean(actual_scores), 3)
-        except:
-            mean_actual_score = "Could not be calculated as no true actual matrix available."
-        # Calculate and round the mean MAE for cross-validation scores
+            # Calculate and round the mean MAE for cross-validation scores
+            try:
+                validation_scores = np.array(validation_scores)
+                mean_validation_score = round(np.mean(validation_scores), 3)
+            except:
+                mean_validation_score = "Could not be calculated as interpolation was partly used."
 
-        try:
-            validation_scores = np.array(validation_scores)
-            mean_validation_score = round(np.mean(validation_scores), 3)
-        except:
-            mean_validation_score = "Could not be calculated as interpolation was partly used."
+            self.scores[filename] = {"actual": mean_actual_score, "validation": mean_validation_score}
+            print(f'MAE actual: {str(mean_actual_score)}')
+            print(f'MAE cross validation: {mean_validation_score}')
 
         end_time = time.time()
         execution_time = end_time - start_time
-        print(f'MAE actual: {str(mean_actual_score)}')
-        print(f'MAE cross validation: {mean_validation_score}')
         print(f"runtime: {execution_time:.2f} seconds \n")
-        self.scores[npy_name] = {"actual": mean_actual_score, "validation": mean_validation_score}
 
-    def learning_function(self, X_train, y_train, X_test):
+    def train_model(self, X_train, y_train, X_test):
         """
         Perform machine learning model training and prediction.
 
@@ -517,7 +583,62 @@ class Gapfiller:
             1. predicted (float or ndarray): The predicted values for the test data.
             2. validation_score (float or str): The cross-validation score (if available).
         """
-        raise Exception("You need to call a learning function to fill the gaps!")
+        # Performing gap filling using Support Vector Regression (SVR) as the predictive model.
+        if self.learning_function == "SVR":
+            # Combine sample for the standardization procedure
+            sample = np.vstack((X_train, X_test))
+
+            # Standardize the sample and split again
+            sample = preprocessing.scale(sample)
+            X_train = sample[:-1, :]
+            X_test = sample[-1:, :]
+
+            if self.hyperparameters == 'Custom':
+                estimator = SVR()
+                # Set the hyperparameters for the SVR model
+                params = {'kernel': 'linear', 'gamma': 'scale', 'C': 1000, 'epsilon': 1}
+                estimator.set_params(**params)
+
+                # Perform cross-validation with 3 folds
+                fold = KFold(n_splits=3, shuffle=True)
+                try:
+                    validation_score = cross_val_score(estimator=estimator, X=X_train, y=np.ravel(y_train), cv=fold,
+                                                       scoring='neg_mean_absolute_error')
+                except:
+                    return None, None
+
+                # Fit the SVR model on the training data and predict on the test data
+                estimator.fit(X_train, np.ravel(y_train))
+                predicted = estimator.predict(X_test)
+            else:
+                # Define lists of hyperparameter values for grid/randomized search
+                Cs = [0.001, 0.01, 0.1, 1, 10]
+                epsilons = [0.1, 0.4, 0.7, 1.0]
+                param_grid = {'C': Cs, 'epsilon': epsilons}
+
+                if self.hyperparameters == 'RandomGridSearch':
+                    estimator = SVR(kernel='linear', gamma='scale', C=1000, epsilon=1)
+                    # Perform randomized grid search with cross-validation (3 folds)
+                    optimizer = RandomizedSearchCV(estimator, param_grid, n_iter=5, cv=3, scoring='neg_mean_absolute_error')
+                elif self.hyperparameters == 'FullGridSearch':
+                    estimator = SVR(kernel='linear', gamma='scale')
+                    # Perform full grid search with cross-validation (3 folds)
+                    optimizer = GridSearchCV(estimator, param_grid, cv=3, scoring='neg_mean_absolute_error')
+
+                try:
+                    # Fit the optimizer to the training data to find the best hyperparameters
+                    optimizer.fit(X_train, np.ravel(y_train))
+                except:
+                    return None, None
+
+                # Get the best SVR model from the optimizer
+                regression = optimizer.best_estimator_
+                # Predict using the best SVR model on the test data
+                predicted = regression.predict(X_test)
+                # Get the validation score (negative mean absolute error) from the optimizer
+                validation_score = abs(optimizer.best_score_)
+
+        return predicted, validation_score
 
     def interpolation(self, gap_index):
         """
@@ -532,15 +653,15 @@ class Gapfiller:
         float: The interpolated value for the filled gap.
         """
         # Fill in gaps using the nearest neighbor interpolation
-        all_pixels = self.temp_array_with_gaps.size
+        all_pixels = self.temp_gap_array.size
 
         # Check if the matrix contains just gaps; if so, no interpolation is performed
-        if all_pixels - (self.temp_array_with_gaps == -100).sum() + np.isnan(self.temp_array_with_gaps).sum() <= 10:
+        if all_pixels - (self.temp_gap_array == -100).sum() + np.isnan(self.temp_gap_array).sum() <= 10:
             print(f'No calculation for matrix - matrix contains just gaps')
         else:
             # Create a meshgrid of coordinates for the known values
-            x, y = np.indices(self.temp_array_with_gaps.shape)
-            copy_matrix = np.copy(self.temp_array_with_gaps)
+            x, y = np.indices(self.temp_gap_array.shape)
+            copy_matrix = np.copy(self.temp_gap_array)
             # Replace gap values with NaN to represent missing values
             copy_matrix[copy_matrix == self.gap_value] = np.nan
             # Extract coordinates and values of known pixels
@@ -553,109 +674,3 @@ class Gapfiller:
                                              method='nearest')
 
             return predicted
-
-
-class SupportVectorRegressionGapfill(Gapfiller):
-    """
-    A class for performing gap filling using Support Vector Regression (SVR) as the predictive model.
-
-    This class extends the Gapfiller class and specializes in using SVR to fill gaps in data matrices.
-    It provides methods for data preprocessing, hyperparameter tuning, cross-validation, and prediction.
-
-    Parameters:
-    - ds_name (str): The name of the dataset.
-    - hyperparameters (str): The hyperparameter configuration to use for SVR. Options include
-      'RandomGridSearch', 'FullGridSearch', or 'Custom'.
-    - predictor (str): The type of predictor to use. Options include 'AllPoints', 'LCC', or 'RandomPoints'.
-
-    Attributes:
-    - ds_name (str): The name of the dataset.
-    - actual_matrix (np.ndarray): The actual data matrix with gaps.
-    - date (str): The date associated with the data.
-    - data_with_gaps (dict): A dictionary containing data matrices with different gap sizes.
-    - directory (str): The directory where results and data are stored.
-    - gap_value (float): The gap value in the data.
-    - historical_data (np.ndarray): Historical data matrices.
-    - hyperparameters (str): The hyperparameter configuration used for SVR.
-    - metadata (dict): Metadata associated with the dataset.
-    - predictor (str): The type of predictor used for gap filling.
-    - pool (multiprocessing.dummy.Pool): A pool of worker processes for parallelization.
-    - scores (dict): Dictionary to store MAE scores for gap filling results.
-    - temp_array_with_gaps (np.ndarray): Temporary data array with gaps for gap filling.
-    - temp_known_pixels (int): Number of known pixels in the temporary data array.
-    - runtimes (dict): Dictionary to store runtime information for gap filling.
-
-    Methods:
-    - gapfill(): Perform the gap filling process using SVR for different gap sizes.
-    - get_arrays(): Retrieve data arrays and initialize necessary variables.
-    - make_directory(): Create a directory to store gap filling results.
-    - pixel_model(gap_index): Predict missing values for a specific pixel based on the chosen predictor.
-    - create_dataframe(coords): Create a dataframe from selected coordinates.
-    - get_random_points(): Get random non-gap coordinates for use as predictors.
-    - get_extra_matrix_points(gap_index): Get coordinates based on Land Cover Classification (LCC) for modeling.
-    - preprocess_dataframe(dataframe): Preprocess the dataframe, handling NaN values and cloud-covered areas.
-    - get_train_test_sets(dataframe): Split the dataframe into training and testing sets.
-    - process_results(gap_size, filled_array, actual_scores, validation_scores, start_time): Process and print gap filling results.
-    - learning_function(X_train, y_train, X_test): Perform SVR training, hyperparameter tuning, and prediction.
-    - interpolation(gap_index): Perform nearest neighbor interpolation for gap filling.
-
-    Example:
-    ```
-    SupportVectorRegressionGapfill(ds_name='Germany', hyperparameters='RandomGridSearch', predictor="LCC").gapfill()
-    ```
-    """
-    def learning_function(self, X_train, y_train, X_test):
-        # Combine sample for the standardization procedure
-        sample = np.vstack((X_train, X_test))
-
-        # Standardize the sample and split again
-        sample = preprocessing.scale(sample)
-        X_train = sample[:-1, :]
-        X_test = sample[-1:, :]
-
-        if self.hyperparameters == 'Custom':
-            estimator = SVR()
-            # Set the hyperparameters for the SVR model
-            params = {'kernel': 'linear', 'gamma': 'scale', 'C': 1000, 'epsilon': 1}
-            estimator.set_params(**params)
-
-            # Perform cross-validation with 3 folds
-            fold = KFold(n_splits=3, shuffle=True)
-            try:
-                validation_score = cross_val_score(estimator=estimator, X=X_train, y=np.ravel(y_train), cv=fold,
-                                               scoring='neg_mean_absolute_error')
-            except:
-                return None, None
-
-            # Fit the SVR model on the training data and predict on the test data
-            estimator.fit(X_train, np.ravel(y_train))
-            predicted = estimator.predict(X_test)
-        else:
-            # Define lists of hyperparameter values for grid/randomized search
-            Cs = [0.001, 0.01, 0.1, 1, 10]
-            epsilons = [0.1, 0.4, 0.7, 1.0]
-            param_grid = {'C': Cs, 'epsilon': epsilons}
-
-            if self.hyperparameters == 'RandomGridSearch':
-                estimator = SVR(kernel='linear', gamma='scale', C=1000, epsilon=1)
-                # Perform randomized grid search with cross-validation (3 folds)
-                optimizer = RandomizedSearchCV(estimator, param_grid, n_iter=5, cv=3, scoring='neg_mean_absolute_error')
-            elif self.hyperparameters == 'FullGridSearch':
-                estimator = SVR(kernel='linear', gamma='scale')
-                # Perform full grid search with cross-validation (3 folds)
-                optimizer = GridSearchCV(estimator, param_grid, cv=3, scoring='neg_mean_absolute_error')
-
-            try:
-                # Fit the optimizer to the training data to find the best hyperparameters
-                optimizer.fit(X_train, np.ravel(y_train))
-            except:
-                return None, None
-
-            # Get the best SVR model from the optimizer
-            regression = optimizer.best_estimator_
-            # Predict using the best SVR model on the test data
-            predicted = regression.predict(X_test)
-            # Get the validation score (negative mean absolute error) from the optimizer
-            validation_score = abs(optimizer.best_score_)
-
-        return predicted, validation_score
