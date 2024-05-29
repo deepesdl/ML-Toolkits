@@ -1,11 +1,11 @@
-from torch.utils.data import DataLoader
-from time import time
-from torch.distributed.elastic.multiprocessing.errors import record
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed import init_process_group, destroy_process_group
-import torch.distributed as dist
-import torch
 import os
+import torch
+import torch.distributed as dist
+from time import time
+from torch.utils.data import DataLoader
+from torch.distributed.elastic.multiprocessing.errors import record
+from torch.distributed import init_process_group, destroy_process_group
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 def ddp_init():
