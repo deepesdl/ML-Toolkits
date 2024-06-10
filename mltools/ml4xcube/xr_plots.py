@@ -2,8 +2,8 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 
 
-def plot_geo_data(
-        df, column_to_plot, title='Geographic Plot', label='Geographic Plot [K]', color_map='viridis',
+def plot_slice(
+        df, var_to_plot, xdim, ydim, title='Geographic Plot', label='Geographic Plot [K]', color_map='viridis', xlabel='Longitude', ylabel='Latitude',
         save_fig=False, file_name='plot.png', fig_size=(15, 10), edge_color='black', base_map='naturalearth_lowres',
         marker='o', vmin=None, vmax=None, ticks=None):
     """
@@ -11,7 +11,9 @@ def plot_geo_data(
 
     Parameters:
         df (DataFrame): DataFrame containing the latitude and longitude and data to plot.
-        column_to_plot (str): Name of the column which contains the data to visualize.
+        var_to_plot (str): Name of the column which contains the data to visualize.
+        xdim (str): Name of the x dimension to plot.
+        ydim (str): Name of the y dimension to plot.
         title (str): Title of the plot.
         label (str): Legend label for the plot.
         color_map (str): Color map to use for the plot.
@@ -26,12 +28,8 @@ def plot_geo_data(
     """
     plt.ioff()
 
-    # Check if the necessary columns exist in the dataframe
-    if 'lon' not in df.columns or 'lat' not in df.columns:
-        raise ValueError("DataFrame must contain 'lon' and 'lat' columns")
-
     # Create a GeoDataFrame from the DataFrame
-    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
+    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[xdim], df[ydim]))
 
     legend_kwds = {'shrink': 0.5, 'label': label}
     if ticks and isinstance(ticks, list) and len(ticks) == 2:
@@ -42,12 +40,12 @@ def plot_geo_data(
 
     # Plotting
     ax = world.plot(figsize=fig_size, color='white', edgecolor=edge_color)
-    gdf.plot(ax=ax, column=column_to_plot, cmap=color_map, legend=True, marker=marker,
+    gdf.plot(ax=ax, column=var_to_plot, cmap=color_map, legend=True, marker=marker,
              markersize=0.1, legend_kwds=legend_kwds, vmin=vmin, vmax=vmax, rasterized=True)
 
     plt.title(title)
-    plt.xlabel('Longitude')
-    plt.ylabel('Latitude')
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
 
     if save_fig:
         plt.savefig(file_name, bbox_inches='tight')
