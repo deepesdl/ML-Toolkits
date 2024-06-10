@@ -6,9 +6,8 @@ from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks
 
 
 class XrDataset():
-    def __init__(self, ds: xr.Dataset, num_chunks: int, rand_chunk: bool = True,
-                 drop_nan: bool = True, strict_nan: bool = False,
-                 filter_var: str = 'land_mask', patience: int = 500):
+    def __init__(self, ds: xr.Dataset, chunk_indices: list = None, num_chunks: int = None, rand_chunk: bool = True,
+                 drop_nan: bool = True, strict_nan: bool = False, filter_var: str = 'land_mask', patience: int = 500):
         """
         Initialize xarray dataset.
 
@@ -32,8 +31,12 @@ class XrDataset():
         self.filter_var = filter_var
         self.patience = patience
         self.total_chunks = calculate_total_chunks(self.ds)
+        self.chunks = None
+        self.chunk_indices = chunk_indices
 
-        if self.total_chunks >= num_chunks:
+        if not self.chunk_indices is None:
+            self.num_chunks = len(self.chunk_indices)
+        elif num_chunks is not None and self.total_chunks >= num_chunks:
             self.num_chunks = num_chunks
         else:
             self.num_chunks = self.total_chunks
@@ -95,14 +98,17 @@ class XrDataset():
                 print("Patience threshold reached, returning collected chunks.")
                 break
 
-            if self.rand_chunk:
+            if self.rand_chunk and self.chunk_indices is None:
                 chunk_index = random.randint(0, self.total_chunks - 1)  # Select a random chunk index
 
             if chunk_index in chunks_idx:
                 continue  # Skip if this chunk has already been processed
 
             # Retrieve the chunk by its index
-            chunk = get_chunk_by_index(self.ds, chunk_index)
+            if self.chunk_indices is None:
+                chunk = get_chunk_by_index(self.ds, chunk_index)
+            else:
+                chunk = get_chunk_by_index(self.ds, self.chunk_indices[chunk_index])
 
             cft, valid_chunk = self.preprocess_chunk(chunk)
 
@@ -114,6 +120,9 @@ class XrDataset():
                 no_valid_chunk_count += 1  # increment the patience counter if no valid chunk is found
 
             chunk_index += 1
+        print(chunks_idx)
         return chunks_list
+
+
 
 
