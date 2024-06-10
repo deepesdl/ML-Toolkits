@@ -1,19 +1,21 @@
 import torch
 import random
+import xarray as xr
 from typing import Callable
 from torch.utils.data import Dataset, DataLoader
-
 from ml4xcube.cube_utilities import calculate_total_chunks, get_chunk_by_index
 from ml4xcube.preprocessing import apply_filter, drop_nan_values
 
 
 class LargeScaleXrDataset(Dataset):
-    def __init__(self, xr_dataset, num_chunks, rand_chunk=True, drop_nan=True, filter_var='land_mask'):
+    def __init__(self, xr_dataset: xr.Dataset, chunk_indices: list = None, num_chunks: int = None,
+                 rand_chunk: bool = True, drop_nan: bool = True, filter_var: str = 'land_mask'):
         """
         Initialize the dataset to manage large datasets efficiently.
 
         Args:
             xr_dataset (xr.Dataset): The xarray dataset.
+            chunk_indices (list): List of indices of chunks to load.
             num_chunks (int): Number of chunks to process dynamically.
             rand_chunk (bool): Whether to select chunks randomly.
             drop_nan (bool): Whether to drop NaN values.
@@ -25,7 +27,9 @@ class LargeScaleXrDataset(Dataset):
         self.drop_nan = drop_nan
         self.filter_var = filter_var
         self.total_chunks = calculate_total_chunks(xr_dataset)
-        if self.total_chunks >= num_chunks:
+        if not chunk_indices is None:
+            self.chunk_indices = chunk_indices
+        elif num_chunks is not None and self.total_chunks >= num_chunks:
             self.chunk_indices = random.sample(range(self.total_chunks), num_chunks)
         else:
             self.chunk_indices = range(self.total_chunks)
@@ -48,7 +52,7 @@ class LargeScaleXrDataset(Dataset):
         return cft  # Return the processed chunk
 
 
-def prepare_dataloader(dataset: Dataset, batch_size: int, callback_fn: Callable = None, num_workers: int = 0, parallel: bool = False, shuffle = True) -> DataLoader:
+def prepare_dataloader(dataset: Dataset, batch_size: int = 1, callback_fn: Callable = None, num_workers: int = 0, parallel: bool = False, shuffle = True) -> DataLoader:
     """
     Prepares a DataLoader.
 
@@ -75,5 +79,6 @@ def prepare_dataloader(dataset: Dataset, batch_size: int, callback_fn: Callable 
         pin_memory=True if torch.cuda.is_available() else False,  # Conditionally use pin_memory
         shuffle=shuffle,
         collate_fn=callback_fn,
-        sampler=sampler
+        sampler=sampler,
+        drop_last=True
     )
