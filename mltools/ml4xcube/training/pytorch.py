@@ -17,7 +17,6 @@ class Trainer:
             patience: int = 10,
             metrics: list = None,
             epochs: int = 10,
-            task_type: str = "supervised",
             mlflow_run=None,
             device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ) -> None:
@@ -33,7 +32,6 @@ class Trainer:
         self.metrics = metrics if metrics is not None else [torch.nn.MSELoss(reduction='mean')]
         self.max_epochs = epochs
         self.device = device
-        self.task_type = task_type
         self.mlflow_run = mlflow_run
 
     def _run_batch(self, inputs, targets):
@@ -55,12 +53,9 @@ class Trainer:
         total_loss = 0.0
         total_count = 0
         for batch in self.train_data:
-            if self.task_type == 'supervised':
-                inputs, targets = batch
-            else:
-                inputs = batch
-                targets = inputs
+            inputs, targets = batch
             with torch.set_grad_enabled(True):
+                if inputs.numel() == 0: continue
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
                 loss = self._run_batch(inputs, targets)
             total_loss += loss * len(inputs)
@@ -78,11 +73,8 @@ class Trainer:
         total_loss = 0.0
         total_count = 0
         for batch in self.test_data:
-            if self.task_type == 'supervised':
-                inputs, targets = batch
-            else:
-                inputs = batch
-                targets = inputs
+            inputs, targets = batch
+            if inputs.numel() == 0: continue
             inputs, targets = inputs.to(self.device), targets.to(self.device)
             with torch.no_grad():
                 outputs = self.model(inputs)
