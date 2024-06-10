@@ -31,7 +31,7 @@ If you're planning to use `ml4xcube` with TensorFlow or PyTorch, set up these fr
 To use `ml4xcube` in your project, simply import the necessary module:
 
 ```python
-from ml4xcube.statistics import normalize, standardize
+from ml4xcube.preprocessing import normalize, standardize
 from ml4xcube.training.pytorch import Trainer
 # Other imports...
 ```
