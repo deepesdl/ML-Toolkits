@@ -1,5 +1,7 @@
+import os
 import torch
 from torch.utils.data import DataLoader
+from ml4xcube.training.train_plots import plot_loss
 
 
 class Trainer:
@@ -15,10 +17,12 @@ class Trainer:
             best_model_path: str,
             early_stopping: bool = True,
             patience: int = 10,
+            loss = torch.nn.MSELoss(reduction='mean'),
             metrics: list = None,
             epochs: int = 10,
             mlflow_run=None,
-            device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+            create_loss_plot: bool = False,
     ) -> None:
         self.model = model.to(device)
         self.train_data = train_data
@@ -29,18 +33,24 @@ class Trainer:
         self.patience = patience
         self.best_val_loss = float('inf')
         self.strikes = 0
-        self.metrics = metrics if metrics is not None else [torch.nn.MSELoss(reduction='mean')]
+        self.loss = loss
+        self.metrics = metrics
         self.max_epochs = epochs
         self.device = device
         self.mlflow_run = mlflow_run
+        self.model_name = os.path.basename(os.path.normpath(self.best_model_path))
+        self.val_list = list()
+        self.train_list = list()
+        self.create_loss_plot = create_loss_plot
 
     def _run_batch(self, inputs, targets):
         """
         Runs a single batch of training data through the model.
         """
+        inputs, targets = inputs.to(self.device), targets.to(self.device)
         self.optimizer.zero_grad()
         outputs = self.model(inputs)
-        loss = self.metrics[0](outputs, targets)
+        loss = self.loss(outputs, targets)
         if loss.requires_grad:  # Check if loss requires gradients
             loss.backward()
         return loss.item()
@@ -56,12 +66,14 @@ class Trainer:
             inputs, targets = batch
             with torch.set_grad_enabled(True):
                 if inputs.numel() == 0: continue
-                inputs, targets = inputs.to(self.device), targets.to(self.device)
                 loss = self._run_batch(inputs, targets)
             total_loss += loss * len(inputs)
             total_count += len(inputs)
 
-        print(f"Epoch {epoch}: Average Loss: {(total_loss / total_count):.4e}")
+        train_avg_loss = total_loss / total_count
+        self.train_list.append(train_avg_loss)
+
+        print(f"Epoch {epoch}: Average Loss: {train_avg_loss:.4e}")
         if self.mlflow_run:  # Check if an MLflow run instance is available
             self.mlflow_run.log_metric("training_loss", (total_loss / total_count), step=epoch)
 
@@ -75,10 +87,9 @@ class Trainer:
         for batch in self.test_data:
             inputs, targets = batch
             if inputs.numel() == 0: continue
-            inputs, targets = inputs.to(self.device), targets.to(self.device)
             with torch.no_grad():
                 outputs = self.model(inputs)
-                loss = self.metrics[0](outputs, targets)
+                loss = self.loss(outputs, targets)
                 total_loss += loss.item() * len(inputs)
                 total_count += len(inputs)
 
@@ -86,6 +97,8 @@ class Trainer:
         print(f"Epoch {epoch}: Validation Loss: {avg_val_loss:.4e}")
         if self.mlflow_run:
             self.mlflow_run.log_metric("validation_loss", avg_val_loss, step=epoch)
+
+        self.val_list.append(avg_val_loss)
         return avg_val_loss
 
     def train(self):
@@ -114,5 +127,8 @@ class Trainer:
         if self.mlflow_run:
             self.mlflow_run.pytorch.log_model(self.model, "model")
             print("Log best model weights.")
+
+        if self.create_loss_plot:
+            plot_loss(self.train_list, self.val_list)
 
         return self.model

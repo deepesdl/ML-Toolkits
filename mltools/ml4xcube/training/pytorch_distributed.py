@@ -3,6 +3,7 @@ import torch
 import torch.distributed as dist
 from time import time
 from torch.utils.data import DataLoader
+from ml4xcube.training.train_plots import plot_loss
 from torch.distributed.elastic.multiprocessing.errors import record
 from torch.distributed import init_process_group, destroy_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -36,9 +37,10 @@ class Trainer:
             snapshot_path: str = None,
             early_stopping: bool = True,
             patience: int = 10,
+            loss = None,
             metrics: list = None,
-            task_type: str = "supervised",
-            print_loss_per_gpu: bool = False  # New parameter to control loss printing
+            print_loss_per_gpu: bool = False,  # New parameter to control loss printing
+            create_loss_plot: bool = False
     ) -> None:
         self.gpu_id = int(os.environ["LOCAL_RANK"])  # GPU ID for the current process
         self.model = model.to(self.gpu_id)  # Moves model to the correct device
@@ -53,10 +55,13 @@ class Trainer:
         self.patience = patience  # Number of epochs to wait before early stop if no progress on the validation set
         self.best_val_loss = float('inf')  # Best validation loss for early stopping
         self.strikes = 0  # Counter for epochs without improvement
-        self.metrics = metrics if metrics is not None else [torch.nn.MSELoss(reduction='mean')]
+        self.loss = loss # Loss function
+        self.metrics = metrics # List of metrics to compute for validation purposes
         self.model = DDP(self.model, device_ids=[self.gpu_id], find_unused_parameters=True)  # Wraps the model for DDP
-        self.task_type = task_type  # The type of training task (supervised or unsupervised)
         self.print_loss_per_gpu = print_loss_per_gpu
+        self.create_loss_plot = create_loss_plot
+        self.train_list = list()
+        self.val_list = list()
 
     def _load_snapshot(self, snapshot_path: str):
         """
@@ -83,9 +88,10 @@ class Trainer:
         The loss value for the batch.
         """
         start_time = time()
+        inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
         self.optimizer.zero_grad()
         outputs = self.model(inputs)
-        loss = self.metrics[0](outputs, targets)
+        loss = self.loss(outputs, targets)
         if loss.requires_grad:  # Check if loss requires gradients
             loss.backward()
 
@@ -108,21 +114,15 @@ class Trainer:
         running_loss = 0.0
         running_size = 0
         self.train_data.sampler.set_epoch(epoch)
-        for batch in self.train_data:
-            if self.task_type == 'supervised':
-                inputs, targets = batch
-            elif self.task_type == 'reconstruction':
-                inputs = batch
-                targets = inputs  # For reconstruction tasks, inputs are used as targets
-            start_time = time()
+        for inputs, targets in self.train_data:
             with torch.set_grad_enabled(True):
                 if inputs.numel() == 0: continue
-                inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
                 loss = self._run_batch(inputs, targets)
             running_loss += loss.item() * len(inputs)
             running_size += len(inputs)
 
         avg_epoch_loss = running_loss / running_size
+        self.train_list.append(avg_epoch_loss)
         if self.gpu_id == 0:
             print(f"Epoch {epoch} | Average Loss: {avg_epoch_loss:.4f}")
 
@@ -137,15 +137,9 @@ class Trainer:
         running_loss = 0.0
         running_size = 0
 
-        for batch in self.test_data:
-            if self.task_type == 'supervised':
-                inputs, targets = batch
-            elif self.task_type == 'reconstruction':
-                inputs = batch
-                targets = inputs
+        for inputs, targets in self.test_data:
             with torch.no_grad():  # No need to track gradients during validation
                 if inputs.numel() == 0: continue
-                inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
                 loss = self._run_batch(inputs, targets)
             running_loss += loss.item() * len(inputs)
             running_size += len(inputs)
@@ -162,6 +156,8 @@ class Trainer:
 
         # Compute the average loss across all GPUs and samples
         avg_val_loss = running_loss_tensor.item() / running_size_tensor.item()
+
+        self.val_list.append(avg_val_loss)
 
         if self.gpu_id == 0:
             print(f"Validation Loss: {avg_val_loss:.4e}")
@@ -213,6 +209,9 @@ class Trainer:
                     if self.gpu_id == 0:
                         print('Stopping early due to no improvement.')
                     break
+
+        if self.create_loss_plot:
+            plot_loss(self.train_list, self.val_list)
 
 
 @record
