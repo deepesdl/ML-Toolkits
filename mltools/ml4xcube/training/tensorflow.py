@@ -1,5 +1,6 @@
+import os
 import tensorflow as tf
-from typing import Union
+from ml4xcube.training.train_plots import plot_loss
 
 class Trainer:
 
@@ -11,36 +12,29 @@ class Trainer:
             model: tf.keras.Model,
             train_data: tf.data.Dataset,
             test_data: tf.data.Dataset,
-            optimizer: Union[tf.keras.optimizers.Optimizer, str],
             best_model_path: str,
-            learning_rate: float = 0.001,
-            loss: Union[tf.keras.losses.Loss, str] = "mean_squared_error",
             early_stopping: bool = True,
             patience: int = 10,
-            metrics: list = None,
             tf_log_dir: str = './logs',
-            mlflow_run=None,
-            summery: bool = False,
+            mlflow_run = None,
             epochs: int = 100,
-            train_epoch_steps = None,
-            val_epoch_steps = None
+            train_epoch_steps: int  = None,
+            val_epoch_steps: int = None,
+            create_loss_plot: bool = False,
     ) -> None:
         self.model = model
         self.train_data = train_data
         self.test_data = test_data
-        self.optimizer = optimizer
-        self.learning_rate = learning_rate
         self.best_model_path = best_model_path
-        self.loss = loss
         self.max_epochs = epochs
         self.early_stopping = early_stopping
         self.patience = patience
-        self.metrics = metrics
         self.tf_log_dir = tf_log_dir
         self.mlflow_run = mlflow_run
-        self.summery = summery
         self.steps_per_train_epoch = train_epoch_steps
         self.steps_per_validation_epoch = val_epoch_steps
+        self.model_name = os.path.basename(os.path.normpath(self.best_model_path))
+        self.create_loss_plot = create_loss_plot
 
     def train(self):
 
@@ -76,13 +70,7 @@ class Trainer:
                 mode='min'
             ))
 
-        self.model.compile(optimizer=self.optimizer, loss=self.loss, metrics=self.metrics)
-
-        if self.summery: self.model.summary()
-
-        self.model.optimizer.learning_rate.assign(self.learning_rate)
-
-        self.model.fit(
+        history = self.model.fit(
             self.train_data,
             epochs=self.max_epochs,
             steps_per_epoch=self.steps_per_train_epoch,
@@ -92,7 +80,12 @@ class Trainer:
         )
 
         if self.mlflow_run:
-            self.mlflow_run.log_artifact(self.best_model_path, "model")
+            self.mlflow_run.log_artifact(self.best_model_path, self.model_name)
+
+        if self.create_loss_plot:
+            train_loss = history.history['loss']
+            val_loss = history.history['val_loss']
+            plot_loss(train_loss, val_loss)
 
         return self.model
 
