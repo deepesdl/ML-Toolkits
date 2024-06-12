@@ -1,3 +1,4 @@
+import os
 import joblib
 import numpy as np
 from typing import Union, Tuple
@@ -38,6 +39,7 @@ class Trainer:
         self.batch_training = batch_training
         self.mlflow_run = mlflow_run
         self.task_type = task_type
+        self.model_name = os.path.basename(os.path.normpath(self.model_path))
 
     def run_batch_training(self, mode='Training'):
         """Validates the model on the test dataset if provided."""
@@ -114,7 +116,7 @@ class Trainer:
             print(f"Model parameters saved.")
 
         if self.mlflow_run:
-            self.mlflow_run.log_artifact(self.model_path, "model")
+            self.mlflow_run.log_artifact(self.model_path, self.model_name)
 
         return self.model
 
