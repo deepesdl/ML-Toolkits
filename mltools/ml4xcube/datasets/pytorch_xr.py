@@ -1,15 +1,19 @@
 import torch
 import random
 import xarray as xr
-from typing import Callable
+from typing import Tuple, Optional, Dict, List
 from torch.utils.data import Dataset, DataLoader
-from ml4xcube.cube_utilities import calculate_total_chunks, get_chunk_by_index
+from ml4xcube.cube_utilities import split_chunk
 from ml4xcube.preprocessing import apply_filter, drop_nan_values
+from ml4xcube.cube_utilities import calculate_total_chunks, get_chunk_by_index
 
 
 class LargeScaleXrDataset(Dataset):
     def __init__(self, xr_dataset: xr.Dataset, chunk_indices: list = None, num_chunks: int = None,
-                 rand_chunk: bool = True, drop_nan: bool = True, filter_var: str = 'land_mask'):
+                 rand_chunk: bool = True, drop_nan: bool = True, filter_var: str = 'land_mask',
+                 block_sizes: Optional[Dict[str, Optional[int]]] = None,
+                 point_indices: Optional[List[Tuple[str, int]]] = None,
+                 overlap: Optional[List[Tuple[str, int]]] = None):
         """
         Initialize the dataset to manage large datasets efficiently.
 
@@ -26,6 +30,9 @@ class LargeScaleXrDataset(Dataset):
         self.rand_chunk = rand_chunk
         self.drop_nan = drop_nan
         self.filter_var = filter_var
+        self.block_sizes = block_sizes
+        self.point_indices = point_indices
+        self.overlap = overlap
         self.total_chunks = calculate_total_chunks(xr_dataset)
         if not chunk_indices is None:
             self.chunk_indices = chunk_indices
@@ -43,8 +50,18 @@ class LargeScaleXrDataset(Dataset):
         chunk = get_chunk_by_index(self.ds, chunk_index)
 
         # Process the chunk
-        cf = {x: chunk[x].ravel() for x in chunk.keys()}
-        cft = apply_filter(cf, self.filter_var)
+        if self.point_indices is not None:
+            cf = {x: chunk[x] for x in chunk.keys()}
+
+            cf = split_chunk(cf, self.point_indices, overlap=self.overlap)
+
+        else:
+            cf = {x: chunk[x].ravel() for x in chunk.keys()}
+
+        if not self.filter_var is None:
+            cft = apply_filter(cf, self.filter_var)
+        else:
+            cft = cf
 
         if self.drop_nan:
             cft = drop_nan_values(cft, list(cft.keys()))

@@ -1,13 +1,18 @@
 import random
 import numpy as np
 import xarray as xr
+from typing import Tuple, Optional, Dict, List
+from ml4xcube.cube_utilities import split_chunk
 from ml4xcube.preprocessing import apply_filter, drop_nan_values
 from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks
 
 
 class XrDataset():
     def __init__(self, ds: xr.Dataset, chunk_indices: list = None, num_chunks: int = None, rand_chunk: bool = True,
-                 drop_nan: bool = True, strict_nan: bool = False, filter_var: str = 'land_mask', patience: int = 500):
+                 drop_nan: bool = True, strict_nan: bool = False, filter_var: str = 'land_mask', patience: int = 500,
+                 block_sizes: Optional[Dict[str, Optional[int]]] = None,
+                 point_indices: Optional[List[Tuple[str, int]]] = None,
+                 overlap: Optional[List[Tuple[str, int]]] = None):
         """
         Initialize xarray dataset.
 
@@ -30,7 +35,10 @@ class XrDataset():
         self.strict_nan = strict_nan
         self.filter_var = filter_var
         self.patience = patience
-        self.total_chunks = calculate_total_chunks(self.ds)
+        self.block_sizes = block_sizes
+        self.point_indices = point_indices
+        self.overlap = overlap
+        self.total_chunks = calculate_total_chunks(self.ds, self.block_sizes)
         self.chunks = None
         self.chunk_indices = chunk_indices
 
@@ -57,17 +65,28 @@ class XrDataset():
         for key in keys:
             concatenated_chunks[key] = np.concatenate([chunk[key] for chunk in self.chunks], axis=0)
 
+        print(concatenated_chunks)
+
         return concatenated_chunks
 
     def preprocess_chunk(self, chunk):
         # Flatten the data and select only land values, then drop NaN values
-        cf = {x: chunk[x].ravel() for x in chunk.keys()}
+
+        if self.point_indices is not None:
+            cf = {x: chunk[x] for x in chunk.keys()}
+            cf = split_chunk(cf, self.point_indices, overlap=self.overlap)
+
+        else:
+            cf = {x: chunk[x].ravel() for x in chunk.keys()}
 
         # Apply filtering based on the specified variable, if provided
-        cft = apply_filter(cf, self.filter_var)
+        if not self.filter_var is None:
+            cft = apply_filter(cf, self.filter_var)
+        else:
+            cft = cf
 
         valid_chunk = True
-
+#
         if self.drop_nan:
             vars = list(cft.keys())
             cft = drop_nan_values(cft, vars)
@@ -120,7 +139,7 @@ class XrDataset():
                 no_valid_chunk_count += 1  # increment the patience counter if no valid chunk is found
 
             chunk_index += 1
-        print(chunks_idx)
+
         return chunks_list
 
 
