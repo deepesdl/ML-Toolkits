@@ -8,9 +8,9 @@ from torch.utils.data import TensorDataset
 from xcube.core.store import new_data_store
 from ml4xcube.datasets.xr_dataset import XrDataset
 from ml4xcube.cube_utilities import get_chunk_sizes
-from ml4xcube.data_assignment import assign_block_split
+from ml4xcube.data_split import assign_block_split
 from ml4xcube.preprocessing import get_statistics, standardize
-from ml4xcube.datasets.pytorch_xr import prepare_dataloader
+from ml4xcube.datasets.pytorch import prepare_dataloader
 from ml4xcube.training.pytorch_distributed import ddp_init, dist_train, Trainer
 
 
