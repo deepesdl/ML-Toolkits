@@ -1,9 +1,9 @@
 import torch
 import random
 import xarray as xr
-from typing import Tuple, Optional, Dict, List
-from torch.utils.data import Dataset, DataLoader
 from ml4xcube.cube_utilities import split_chunk
+from torch.utils.data import Dataset, DataLoader
+from typing import Tuple, Optional, Dict, List, Callable
 from ml4xcube.preprocessing import apply_filter, drop_nan_values
 from ml4xcube.cube_utilities import calculate_total_chunks, get_chunk_by_index
 
