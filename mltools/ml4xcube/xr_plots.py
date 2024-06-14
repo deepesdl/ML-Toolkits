@@ -3,9 +3,9 @@ import matplotlib.pyplot as plt
 
 
 def plot_slice(
-        df, var_to_plot, xdim, ydim, title='Geographic Plot', label='Geographic Plot [K]', color_map='viridis', xlabel='Longitude', ylabel='Latitude',
-        save_fig=False, file_name='plot.png', fig_size=(15, 10), edge_color='black', base_map='naturalearth_lowres',
-        marker='o', vmin=None, vmax=None, ticks=None):
+        df, var_to_plot, xdim, ydim, title='Geographic Plot', label='Geographic Plot [K]', color_map='viridis',
+        xlabel='Longitude', ylabel='Latitude', save_fig=False, file_name='plot.png', fig_size=(15, 10),
+        edge_color='black', base_map='naturalearth_lowres', marker='o', vmin=None, vmax=None, ticks=None):
     """
     Plots geographic data from a DataFrame with a base map for context.
 
@@ -31,23 +31,28 @@ def plot_slice(
     # Create a GeoDataFrame from the DataFrame
     gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[xdim], df[ydim]))
 
-    legend_kwds = {'shrink': 0.5, 'label': label}
-    if ticks and isinstance(ticks, list) and len(ticks) == 2:
-        legend_kwds['ticks'] = ticks
-
     # Load the world map
     world = gpd.read_file(gpd.datasets.get_path(base_map))
 
     # Plotting
-    ax = world.plot(figsize=fig_size, color='white', edgecolor=edge_color)
-    gdf.plot(ax=ax, column=var_to_plot, cmap=color_map, legend=True, marker=marker,
-             markersize=0.1, legend_kwds=legend_kwds, vmin=vmin, vmax=vmax, rasterized=True)
+    fig, ax = plt.subplots(figsize=fig_size)
+    world.plot(ax=ax, color='white', edgecolor=edge_color)
+
+    plot = gdf.plot(ax=ax, column=var_to_plot, cmap=color_map, legend=False, marker=marker,
+                    markersize=0.1, vmin=vmin, vmax=vmax, rasterized=True)
 
     plt.title(title)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
+    # Create colorbar
+    sm = plt.cm.ScalarMappable(cmap=color_map, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+    sm._A = []
+    cbar = plt.colorbar(sm, ax=ax, shrink=0.5)
+    cbar.set_label(label)
+    if ticks and isinstance(ticks, list) and len(ticks) == 2:
+        cbar.set_ticks(ticks)
+
     if save_fig:
         plt.savefig(file_name, bbox_inches='tight')
     plt.show()
-
