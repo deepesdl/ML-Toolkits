@@ -186,13 +186,6 @@ def split_chunk(chunk: Dict[str, np.ndarray], point_indices: List[Tuple[str, int
         for i in range(len(step_sizes))
     ]
 
-    #num splits ohne overlap 20 / 4 = 5
-    #zusätzlich overlap 2 (20/ (4-2) ) -1= 10
-
-
-    # Calculate the number of splits for each dimension
-    #num_splits = [shape[i] // step_sizes[i] for i in range(len(step_sizes))]
-
     # Calculate the total number of resulting points
     total_points = np.prod(num_splits)
 
@@ -204,19 +197,20 @@ def split_chunk(chunk: Dict[str, np.ndarray], point_indices: List[Tuple[str, int
         else:
             result[key] = np.zeros((total_points, *step_sizes), dtype=chunk[key].dtype)
 
-    # Initialize the result dictionary with the expected shape
-    #result = {key: np.zeros((total_points, *step_sizes), dtype=chunk[key].dtype) for key in chunk.keys()}
-
     # Iterate through all possible splits
     point_idx = 0
 
     for time_idx in range(0, shape[0], step_sizes[0] - overlap_steps[0]):
+        if time_idx + step_sizes[0] > shape[0]: continue
         for lat_idx in range(0, shape[1], step_sizes[1] - overlap_steps[1]):
+            if lat_idx + step_sizes[1] > shape[1]: continue
             for lon_idx in range(0, shape[2], step_sizes[2] - overlap_steps[2]):
+                if lon_idx + step_sizes[2] > shape[2]: continue
                 for key in chunk.keys():
                     result[key][point_idx] = chunk[key][time_idx:time_idx + step_sizes[0],
                                              lat_idx:lat_idx + step_sizes[1],
                                              lon_idx:lon_idx + step_sizes[2]]
+                    #print(result[key][point_idx])
                 point_idx += 1
 
     return result
