@@ -123,7 +123,7 @@ class Gapfiller:
             None
         """
         # Open the cube and identify the variables
-        self.actual_matrix = xr.open_dataset(self.directory + "actual.nc")
+        self.actual_matrix = xr.open_zarr(self.directory + "actual.zarr")
         actual_date = np.datetime_as_string(self.actual_matrix.time, unit='D')
         gap_imitation_directory = self.directory + "GapImitation/"
         variable = [v for v in list(self.actual_matrix.variables) if v not in ["lat", "lon", "time"]][0]
@@ -135,16 +135,16 @@ class Gapfiller:
             files = sorted(os.listdir(gap_imitation_directory))
             # Process the arrays and gap sizes
             for file in files:
-                gap_size = file[:-3].split("_")[-1]
-                self.data_with_gaps[gap_size] = xr.open_dataset(gap_imitation_directory + file)[variable].to_numpy()
+                gap_size = file[:-5].split("_")[-1]
+                self.data_with_gaps[gap_size] = xr.open_zarr(gap_imitation_directory + file)[variable].to_numpy()
         else:
             # Calculate the absolute and relative number of gaps (NaNs) in the variable and process it
-            gaps_absolute = np.isnan(self.actual_matrix[variable]).sum().item()
+            gaps_absolute = np.sum(np.isnan(self.actual_matrix[variable])).values.item()
             gap_size = round(gaps_absolute / self.actual_matrix[variable].size, 3)
             self.data_with_gaps[gap_size] = self.actual_matrix[variable].to_numpy()
 
         # Open the data cube and extract data for each time step in the cube and save it in a NumPy array
-        cube = xr.open_dataset(self.directory + "cube.nc")
+        cube = xr.open_zarr(self.directory + "cube.zarr")
         for t in cube.time:
             # select the historical data as trainings data but avoid including the original array
             if actual_date != np.datetime_as_string(t, unit='D'):
@@ -414,7 +414,7 @@ class Gapfiller:
         list or str: A list of coordinates based on LCC if there are enough coordinates within the same biome;
                      otherwise, a message indicating insufficient known pixels.
         """
-        extra_matrix = xr.open_dataset(self.directory + "extra_matrix_lcc.nc")['lccs_class'].to_numpy()
+        extra_matrix = xr.open_zarr(self.directory + "extra_matrix_lcc.zarr")['lccs_class'].to_numpy()
 
         # Extract the LCC value for the pixel to be filled
         extra_code = extra_matrix[gap_index[0], gap_index[1]]
@@ -544,8 +544,8 @@ class Gapfiller:
         )
 
         actual_date = np.datetime_as_string(self.actual_matrix.time, unit='D')
-        filename = ''.join((actual_date, '-', str(gap_size), '.nc'))
-        filled_xr_array.to_netcdf(self.directory + "Results/" + filename)
+        filename = ''.join((actual_date, '-', str(gap_size), '.zarr'))
+        filled_xr_array.to_zarr(self.directory + "Results/" + filename)
 
         # Calculate and round the mean absolute error (MAE) for actual scores if true matrix exists
         if os.path.exists(self.directory + "GapImitation/"):

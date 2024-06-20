@@ -88,34 +88,34 @@ class GapDataset:
         print(self.ds_name, sliced_ds.sizes.mapping)
 
         # To avoid exceptions due to type errors, save the dataset and load it again
-        sliced_ds.to_netcdf(self.directory + "cube.nc")
-        self.sliced_ds = xr.open_dataset(self.directory + "cube.nc")[sliced_ds.name]
+        sliced_ds.to_zarr(self.directory + "cube.zarr")
+        self.sliced_ds = xr.open_zarr(self.directory + "cube.zarr")[sliced_ds.name]
 
     def get_extra_matrix(self):
         """
         Retrieve Land Cover Classes (LCC) for use as predictors.
 
-        This method opens a NetCDF file containing global LCC data, selects and slices the LCC data
+        This method opens a zarr dataset containing global LCC data, selects and slices the LCC data
         based on the specified latitude and longitude range, and saves it as an extra data matrix
         for use in gap filling.
 
         Returns:
             None
         """
-        # Open the LCCS dataset from a NetCDF file with the global LCC data
+        # Open the LCCS dataset from zarr with the global LCC data
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        data_file = os.path.join(current_dir, 'helper', 'global_lcc.nc')
+        data_file = os.path.join(current_dir, 'helper', 'global_lcc.zarr')
 
         # Check if the file exists at the specified path
         if not os.path.exists(data_file):
             raise FileNotFoundError(f"File not found: {data_file}")
 
-        # Open the LCCS dataset from the NetCDF file
-        lcc_dataset = xr.open_dataset(data_file)['lccs_class']
+        # Open the LCCS dataset from the zarr dataset
+        lcc_dataset = xr.open_zarr(data_file)['lccs_class']
         # Select and slice the LCCS data based on the specified latitude and longitude range
         self.extra_data = lcc_dataset.sel(lat=slice(self.dimensions['lat'][0], self.dimensions['lat'][1]),
                                           lon=slice(self.dimensions['lon'][0], self.dimensions['lon'][1]))
-        self.extra_data.to_netcdf(self.directory + "extra_matrix_lcc.nc")
+        self.extra_data.to_zarr(self.directory + "extra_matrix_lcc.zarr")
 
     def process_actual_matrix(self):
         """
@@ -133,13 +133,13 @@ class GapDataset:
         actual_matrix = self.sliced_ds.sel(time=actual_date)
 
         # Calculate the real gap size percentage and print it with the relevant date to give insights
-        real_gap_size = round(np.isnan(actual_matrix).sum().item() / actual_matrix.size * 100)
+        real_gap_size = round(np.sum(np.isnan(actual_matrix)).values.item() / actual_matrix.size * 100)
         actual_date = np.datetime_as_string(actual_date, unit='D')
         print("date:", actual_date)
         print("real gap size: ", real_gap_size, "%")
 
         # Save the original array
-        actual_matrix.to_netcdf(self.directory + "actual.nc")
+        actual_matrix.to_zarr(self.directory + "actual.zarr")
 
         # If requested create artificial data gaps which values will be estimated later on
         if self.artificial_gaps:
@@ -180,11 +180,14 @@ class GapDataset:
             selected_indices = np.random.choice(non_nan_indices.shape[0], gap_size_absolute, replace=False)
             selected_indices = non_nan_indices[selected_indices]
             # Loop through each of these selected indices and insert -100 as a value
+            # avoid recursion error by making a copy of the xarray values
+            array_with_gaps_values = array_with_gaps.values
             for index in selected_indices:
-                array_with_gaps[index[0], index[1]] = -100
+                array_with_gaps_values[index[0], index[1]] = -100
+            array_with_gaps.values = array_with_gaps_values
 
             # Save the data with artificial gaps in the GapImitation directory
-            array_with_gaps.to_netcdf(new_directory + actual_date + "_" + str(gap_size) + ".nc")
+            array_with_gaps.to_zarr(new_directory + actual_date + "_" + str(gap_size) + ".zarr")
             gap_creation_count += 1
 
         # Format the different gap sized in order to print them to give insights
