@@ -33,7 +33,7 @@ class LargeScaleXrDataset(Dataset):
         self.block_sizes = block_sizes
         self.point_indices = point_indices
         self.overlap = overlap
-        self.total_chunks = calculate_total_chunks(xr_dataset)
+        self.total_chunks = int(calculate_total_chunks(xr_dataset, self.block_sizes))
         if not chunk_indices is None:
             self.chunk_indices = chunk_indices
         elif num_chunks is not None and self.total_chunks >= num_chunks:
@@ -42,7 +42,7 @@ class LargeScaleXrDataset(Dataset):
             self.chunk_indices = range(self.total_chunks)
 
     def __len__(self):
-        return self.num_chunks
+        return len(self.chunk_indices)
 
     def __getitem__(self, idx):
         chunk_index = self.chunk_indices[idx]
@@ -69,7 +69,7 @@ class LargeScaleXrDataset(Dataset):
         return cft  # Return the processed chunk
 
 
-def prepare_dataloader(dataset: Dataset, batch_size: int = 1, callback_fn: Callable = None, num_workers: int = 0, parallel: bool = False, shuffle = True) -> DataLoader:
+def prepare_dataloader(dataset: Dataset, batch_size: int = 1, callback_fn: Callable = None, num_workers: int = 0, parallel: bool = False, shuffle = True, drop_last=True) -> DataLoader:
     """
     Prepares a DataLoader.
 
@@ -97,5 +97,5 @@ def prepare_dataloader(dataset: Dataset, batch_size: int = 1, callback_fn: Calla
         shuffle=shuffle,
         collate_fn=callback_fn,
         sampler=sampler,
-        drop_last=True
+        drop_last=drop_last
     )
