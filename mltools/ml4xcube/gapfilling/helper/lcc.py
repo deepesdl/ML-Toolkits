@@ -4,9 +4,9 @@ import numpy as np
 """
 The python file gets global land cover classification data for the corresponding latitude and longitude 
 coordinates globally.
-The results will be stored in the 'global_lcc.nc' file.
-During the area slicing process the nc-file is the source for the LCC data in order to be used as predictors.
-Once the global nc-file is executed, the nc-file can be used for all gapfilling example applications.
+The results will be stored in the 'global_lcc.zarr' dataset.
+During the area slicing process the zarr dataset is the source for the LCC data in order to be used as predictors.
+Once the global zarr dataset is executed, the dataset can be used for all gapfilling example applications.
 This file can be helpful to extract other variables as predictors and match the coordinates.
 """
 
@@ -69,10 +69,10 @@ def get_lccs(lat_coord_temp, lon_coord_temp):
 
 def process_lccs(lcc_array):
     """
-    Process and remap LCCS data and save it to a NetCDF file.
+    Process and remap LCCS data and save it to a zarr dataset.
 
     This function remaps LCCS values based on a mapping dictionary, and then saves the processed
-    LCCS data to a NetCDF file named 'global_lcc.nc'.
+    LCCS data as a Zarr dataset named 'global_lcc.zarr'.
 
     Parameters:
     - lcc_array (xr.DataArray): LCCS data to be processed.
@@ -91,8 +91,8 @@ def process_lccs(lcc_array):
     for old_value, new_value in value_mapping.items():
         lcc_array = lcc_array.where(lcc_array != old_value, new_value)
 
-    # Save the processed LCCS data to a NetCDF file
-    lcc_array.to_netcdf('helper/global_lcc.nc')
+    # Save the processed LCCS data to a zarr dataset
+    lcc_array.to_zarr('helper/global_lcc.zarr')
 
 
 def main():
