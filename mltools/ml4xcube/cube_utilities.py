@@ -3,7 +3,7 @@ import rechunker
 import numpy as np
 import xarray as xr
 from typing import Sequence, Tuple, Iterator, Dict, List, Optional
-
+import dask.array as da
 
 def get_chunk_sizes(ds: xr.Dataset) -> Sequence[Tuple[str, int]]:
     """Determine maximum chunk sizes of all data variables of dataset *ds*.
@@ -48,27 +48,27 @@ def iter_data_var_blocks(ds: xr.Dataset,
         yield var_blocks
 
 
-def calculate_total_chunks(ds: xr.Dataset, block_sizes: Sequence[Tuple[str, int]] = None) -> int:
+def calculate_total_chunks(ds: xr.Dataset, block_size: Sequence[Tuple[str, int]] = None) -> int:
     """Calculate the total number of chunks for the dataset based on maximum chunk sizes."""
     default_block_sizes = get_chunk_sizes(ds)
 
-    if block_sizes is not None:
+    if block_size is not None:
         # Replace the sizes which are not None
-        for i, (dim, size) in enumerate(block_sizes):
+        for i, (dim, size) in enumerate(block_size):
             if size is not None:
                 default_block_sizes[i] = (dim, size)
 
-    block_sizes = default_block_sizes
+    block_size = default_block_sizes
 
     total_chunks = np.prod([
         len(range(0, ds.dims[dim_name], size))
-        for dim_name, size in block_sizes
+        for dim_name, size in block_size
     ])
 
     return total_chunks
 
 
-def get_chunk_by_index(ds: xr.Dataset, index: int, block_sizes: Sequence[Tuple[str, int]] = None) -> Dict[
+def get_chunk_by_index(ds: xr.Dataset, index: int, block_size: Sequence[Tuple[str, int]] = None) -> Dict[
     str, np.ndarray]:
     """
     Returns a specific data chunk from an xarray.Dataset by index.
@@ -76,9 +76,9 @@ def get_chunk_by_index(ds: xr.Dataset, index: int, block_sizes: Sequence[Tuple[s
     Parameters:
     - ds: The xarray.Dataset from which to retrieve a chunk.
     - index: The linear index of the chunk to retrieve.
-    - block_sizes: An optional sequence of tuples specifying the block size for each dimension.
-                   Each tuple should contain a dimension name and a block size for that dimension.
-                   If not provided, the function will attempt to use the dataset's chunk sizes.
+    - block_size: An optional sequence of tuples specifying the block size for each dimension.
+                  Each tuple should contain a dimension name and a block size for that dimension.
+                  If not provided, the function will attempt to use the dataset's chunk sizes.
 
     Returns:
     A dictionary where keys are variable names and values are the chunk data as numpy arrays.
@@ -86,16 +86,16 @@ def get_chunk_by_index(ds: xr.Dataset, index: int, block_sizes: Sequence[Tuple[s
     # Get the default chunk sizes from the dataset
     default_block_sizes = get_chunk_sizes(ds)
 
-    if block_sizes is not None:
+    if block_size is not None:
         # Replace the sizes which are not None
-        for i, (dim, size) in enumerate(block_sizes):
+        for i, (dim, size) in enumerate(block_size):
             if size is not None:
                 default_block_sizes[i] = (dim, size)
 
-    block_sizes = default_block_sizes
+    block_size = default_block_sizes
 
     # Calculate the total number of chunks along each dimension
-    dim_chunks = [range(0, ds.dims[dim_name], size) for dim_name, size in block_sizes]
+    dim_chunks = [range(0, ds.dims[dim_name], size) for dim_name, size in block_size]
     total_chunks_per_dim = [len(list(chunks)) for chunks in dim_chunks]
 
     # Convert the linear index to a multi-dimensional index
@@ -103,7 +103,7 @@ def get_chunk_by_index(ds: xr.Dataset, index: int, block_sizes: Sequence[Tuple[s
 
     # Calculate the slice for each dimension based on the multi-dimensional index
     dim_slices = {}
-    for dim_idx, (dim_name, block_size) in enumerate(block_sizes):
+    for dim_idx, (dim_name, block_size) in enumerate(block_size):
         start = multi_dim_index[dim_idx] * block_size
         end = min(start + block_size, ds.dims[dim_name])
         dim_slices[dim_name] = slice(start, end)
@@ -210,9 +210,24 @@ def split_chunk(chunk: Dict[str, np.ndarray], point_indices: List[Tuple[str, int
                     result[key][point_idx] = chunk[key][time_idx:time_idx + step_sizes[0],
                                              lat_idx:lat_idx + step_sizes[1],
                                              lon_idx:lon_idx + step_sizes[2]]
-                    #print(result[key][point_idx])
                 point_idx += 1
 
     return result
 
 
+def assign_dims(data: Dict[str, da.Array|xr.DataArray], dims: Tuple) -> Dict[str, xr.DataArray]:
+    """
+    Assign dimension names to data cube and convert them to xarray DataArray.
+
+    Args:
+        data (Dict[str, da.Array]): Dictionary containing Dask arrays.
+        dims (Tuple): Tuple containing dimension names.
+
+    Returns:
+        Dict[str, xr.DataArray]: Dictionary containing xarray DataArray with assigned dimensions.
+    """
+    result = {}
+    for var, dask_array in data.items():
+        if len(dims) >= dask_array.ndim:
+            result[var] = xr.DataArray(dask_array, dims=dims[:dask_array.ndim])
+    return result
