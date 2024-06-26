@@ -14,7 +14,7 @@ from ml4xcube.training.pytorch_distributed import ddp_init, dist_train, Trainer
 at_stat, lst_stat = None, None
 
 
-def preprocess_data(chunk: xr.Dataset):
+def standardize_data(chunk: xr.Dataset):
     """
     Standardize xarray chunks.
     """
@@ -84,7 +84,8 @@ def load_train_objs():
         test_cube   = 'test_cube.zarr',
         nproc       = 5,
         chunk_batch = 10,
-        data_fraq   = 0.01
+        data_fraq   = 0.01,
+        callback_fn = standardize_data
     ).get_datasets()
 
     # Create PyTorch data sets
@@ -107,8 +108,8 @@ def main(save_every: int, total_epochs: int, batch_size: int, snapshot_path: str
     train_set, test_set, model, optimizer = load_train_objs()
 
     # Prepare data loaders
-    train_loader = prepare_dataloader(train_set, batch_size, num_workers=5, parallel=True)
-    test_loader  = prepare_dataloader(test_set, batch_size, num_workers=5, parallel=True)
+    train_loader = prepare_dataloader(train_set, batch_size, num_workers=5, parallel=True, callback_fn=map_function)
+    test_loader  = prepare_dataloader(test_set, batch_size, num_workers=5, parallel=True, callback_fn=map_function)
 
     # Initialize the trainer and start training
     trainer = Trainer(model, train_loader, test_loader, optimizer, save_every, best_model_path, snapshot_path)
