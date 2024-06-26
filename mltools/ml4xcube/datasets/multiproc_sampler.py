@@ -1,18 +1,16 @@
 import zarr
-import math
 import random
 import numpy as np
 import xarray as xr
 import dask.array as da
 from multiprocessing import Pool
 from typing import Tuple, Optional, Dict, List
-from ml4xcube.cube_utilities import split_chunk
+from ml4xcube.cube_utilities import split_chunk, assign_dims
 from ml4xcube.preprocessing import apply_filter, drop_nan_values
 from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks
 
 
-def worker_preprocess_chunk(args):
-    chunk, point_indices, overlap, filter_var, callback_fn, data_split = args
+def process_chunk(chunk, filter_var, point_indices, overlap, callback_fn):
     if point_indices is not None:
         cf = {x: chunk[x] for x in chunk.keys()}
         cf = split_chunk(cf, point_indices, overlap=overlap)
@@ -32,23 +30,58 @@ def worker_preprocess_chunk(args):
     if valid_chunk:
         if callback_fn:
             cft = callback_fn(cft)
+    return cft, valid_chunk
 
-        num_samples = cft[list(cft.keys())[0]].shape[0]
-        indices = list(range(num_samples))
-        random.shuffle(indices)
-        split_idx = int(num_samples * data_split)
-        train_indices = indices[:split_idx]
-        test_indices = indices[split_idx:]
-        return cft, train_indices, test_indices
-    return None, None, None
+def worker_preprocess_chunk(args):
+    chunk, point_indices, overlap, filter_var, callback_fn, data_split = args
+
+    train_chunk = {var: np.empty(0) for var in chunk.keys() if var != 'split'}
+    test_chunk = {var: np.empty(0) for var in chunk.keys() if var != 'split'}
+
+    # Split the data based on the 'split' attribute
+    if 'split' in chunk:
+        train_mask, test_mask = chunk['split'] == True, chunk['split'] == False
+
+        train_cf = {var: np.ma.masked_where(~train_mask, chunk[var]) for var in chunk if var != 'split'}
+        test_cf = {var: np.ma.masked_where(~test_mask, chunk[var]) for var in chunk if var != 'split'}
+
+        train_cft, test_cft = None, None
+        valid_train, valid_test = False, False
+
+        if train_mask.any():
+            train_cft, valid_train = process_chunk(train_cf, filter_var, point_indices, overlap, callback_fn)
+        if test_mask.any():
+            test_cft, valid_test = process_chunk(test_cf, filter_var, point_indices, overlap, callback_fn)
+
+        if valid_train:
+            train_chunk = train_cft
+        if valid_test:
+            test_chunk = test_cft
+    else:
+        cft, valid_train = process_chunk(chunk, filter_var, point_indices, overlap, callback_fn)
+
+        if valid_train:
+            num_samples = cft[list(cft.keys())[0]].shape[0]
+            indices = list(range(num_samples))
+            random.shuffle(indices)
+            split_idx = int(num_samples * data_split)
+            train_indices = indices[:split_idx]
+            test_indices = indices[split_idx:]
+
+            for var in chunk.keys():
+                train_chunk[var] = cft[var][train_indices]
+                test_chunk[var] = cft[var][test_indices]
+    return train_chunk, test_chunk
 
 
 class MultiProcSampler():
-    def __init__(self, ds: xr.Dataset, filter_var: str = 'land_mask', chunk_size: Tuple = (1, ),
+    def __init__(self, ds: xr.Dataset, filter_var: str = 'land_mask',
+                 chunk_size: Tuple = None, train_cube: str = 'train_cube.zarr',
+                 test_cube: str = 'test_cube.zarr', split: int = 0.8,
                  nproc: int = 4, data_fraq: float = 1.0, rand_chunk: bool = False,
                  array_dims: Tuple[str, Optional[str], Optional[str]] = ('samples',),
                  data_split: float = 0.8, chunk_batch: int = None, callback_fn = None,
-                 block_sizes: Optional[Dict[str, Optional[int]]] = None,
+                 block_size: Optional[List[Tuple[str, int]]] = None,
                  point_indices: Optional[List[Tuple[str, int]]] = None,
                  overlap: Optional[List[Tuple[str, int]]] = None):
         """
@@ -74,10 +107,11 @@ class MultiProcSampler():
         self.filter_var = filter_var
         self.data_fraq = data_fraq
         self.data_split = data_split
-        self.block_sizes = block_sizes
+        self.block_size = block_size
         self.point_indices = point_indices
         self.overlap = overlap
-        self.total_chunks = int(calculate_total_chunks(self.ds, self.block_sizes))
+        self.split = split
+        self.total_chunks = int(calculate_total_chunks(self.ds, self.block_size))
         self.num_chunks = int(self.total_chunks * self.data_fraq)
         self.chunks = None
         self.rand_chunk = rand_chunk
@@ -85,9 +119,11 @@ class MultiProcSampler():
         self.array_dims = array_dims
         self.chunk_batch = chunk_batch if chunk_batch is not None else self.nproc
         self.callback_fn = callback_fn
-        self.train_store = zarr.open('train_cube.zarr')
-        self.test_store = zarr.open('test_cube.zarr')
-        self.chunk_size = tuple(dim[1] for dim in self.point_indices) if self.point_indices else chunk_size
+        self.train_store = zarr.open(train_cube)
+        self.test_store = zarr.open(test_cube)
+        self.chunk_size = chunk_size
+        if chunk_size is None:
+            self.chunk_size = tuple(dim[1] for dim in self.point_indices) if self.point_indices else (1, )
         self.total_chunks = calculate_total_chunks(ds)
         self.create_cubes()
 
@@ -102,25 +138,33 @@ class MultiProcSampler():
         Returns:
             None
         """
-        for chunk, train_indices, test_indices in processed_chunks:
+        for train_data, test_data in processed_chunks:
 
-            if chunk is None:
+            if train_data is None and test_data is None:
                 continue
 
-            for var in chunk.keys():
-                train_data = chunk[var][train_indices]
-                test_data = chunk[var][test_indices]
+            for var in self.ds.keys():
+                if var == 'split' or var == 'land_mask': continue
 
                 print(f"Processing variable: {var}")
-                print(f"Train data samples: {train_data.shape[0]}")
-                print(f"Test data samples: {test_data.shape[0]}")
+                print(f"Train data samples: {train_data[var].shape[0]}")
+                print(f"Test data samples: {test_data[var].shape[0]}")
 
-                if var not in self.train_store:
-                    self.train_store.create_dataset(var, data=train_data, chunks=self.chunk_size, append_dim=0)
-                    self.test_store.create_dataset(var, data=test_data, chunks=self.chunk_size, append_dim=0)
-                else:
-                    self.train_store[var].append(train_data)
-                    self.test_store[var].append(test_data)
+                if train_data[var].shape[0] > 0:
+                    train_var_data = train_data[var]
+                    if var not in self.train_store:
+                        self.train_store.create_dataset(var, data=train_var_data, shape=train_var_data.shape, dtype=train_var_data.dtype,
+                                                        chunks=self.chunk_size, append_dim=0)
+                    else:
+                        self.train_store[var].append(train_var_data)
+
+                if test_data[var].shape[0] > 0:
+                    test_var_data = test_data[var]
+                    if var not in self.test_store:
+                        self.test_store.create_dataset(var, data=test_var_data, shape=test_var_data.shape, dtype=test_var_data.dtype,
+                                                       chunks=self.chunk_size, append_dim=0)
+                    else:
+                        self.test_store[var].append(test_var_data)
 
     def create_cubes(self):
         """
@@ -139,29 +183,12 @@ class MultiProcSampler():
         with Pool(processes=self.nproc) as pool:
             for i in range(0, self.num_chunks, self.chunk_batch):
                 batch_indices = chunk_indices[i:i + self.chunk_batch]
-                batch_chunks = [get_chunk_by_index(self.ds, idx) for idx in batch_indices]
+                batch_chunks = [get_chunk_by_index(self.ds, idx, block_size=self.block_size) for idx in batch_indices]
                 processed_chunks = pool.map(worker_preprocess_chunk, [
                     (chunk, self.point_indices, self.overlap, self.filter_var, self.callback_fn, self.data_split)
                     for chunk in batch_chunks
                 ])
                 self.store_chunks(processed_chunks)
-
-    def assign_dims(self, data: Dict[str, da.Array]) -> Dict[str, xr.DataArray]:
-        """
-        Assign dimension names to the Dask arrays and convert them to xarray DataArray.
-
-        Args:
-            data (Dict[str, da.Array]): Dictionary containing Dask arrays.
-
-        Returns:
-            Dict[str, xr.DataArray]: Dictionary containing xarray DataArray with assigned dimensions.
-        """
-        dims = self.array_dims
-        result = {}
-        for var, dask_array in data.items():
-            if len(dims) >= dask_array.ndim:
-                result[var] = xr.DataArray(dask_array, dims=dims[:dask_array.ndim])
-        return result
 
     def get_datasets(self) -> Tuple[xr.Dataset, xr.Dataset]:
         """
@@ -175,8 +202,8 @@ class MultiProcSampler():
         self.test_data = {var: da.from_zarr(self.test_store[var]) for var in self.test_store.array_keys()}
 
         # Assign dimensions using the assign_dims function
-        self.train_data = self.assign_dims(self.train_data)
-        self.test_data = self.assign_dims(self.test_data)
+        self.train_data = assign_dims(self.train_data, self.array_dims)
+        self.test_data = assign_dims(self.test_data, self.array_dims)
 
         train_ds = xr.Dataset(self.train_data)
         test_ds = xr.Dataset(self.test_data)
