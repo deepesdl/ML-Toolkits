@@ -74,15 +74,22 @@ def load_train_objs():
     lm0                = da.from_array(globe.is_land(lat_grid, lon_grid))
     lm                 = da.stack([lm0 for _ in range(ds.dims['time'])], axis=0)
 
-    # Assign land mask to the dataset and split data into blocks
+    # Assign land mask to the dataset
     ds = ds.assign(land_mask=(['time', 'lat', 'lon'], lm.rechunk(chunks=([v for _, v in get_chunk_sizes(ds)]))))
-    #
+
     # Preprocess data and split into training and testing sets
-    train_set, test_set = MultiProcSampler(ds, data_fraq=0.02).get_datasets()
+    train_set, test_set = MultiProcSampler(
+        ds          = ds,
+        train_cube  = 'train_cube.zarr',
+        test_cube   = 'test_cube.zarr',
+        nproc       = 5,
+        chunk_batch = 10,
+        data_fraq   = 0.01
+    ).get_datasets()
 
     # Create PyTorch data sets
     train_ds = LargeScaleXrDataset(train_set)
-    test_ds = LargeScaleXrDataset(test_set)
+    test_ds  = LargeScaleXrDataset(test_set)
 
     # Initialize model and optimizer
     model     = torch.nn.Linear(in_features=1, out_features=1, bias=True)
