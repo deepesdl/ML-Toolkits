@@ -1,46 +1,62 @@
 import random
 import numpy as np
 import xarray as xr
-from typing import Tuple, Optional, Dict, List
-from ml4xcube.cube_utilities import split_chunk
-from ml4xcube.preprocessing import apply_filter, drop_nan_values
-from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks
+from typing import Tuple, Optional, List
+from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_masked_data
+from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks, split_chunk
 
 
 class XrDataset():
-    def __init__(self, ds: xr.Dataset, chunk_indices: list = None, num_chunks: int = None, rand_chunk: bool = True,
-                 drop_nan: bool = True, strict_nan: bool = False, filter_var: str = 'land_mask', patience: int = 500,
-                 block_sizes: Optional[Dict[str, Optional[int]]] = None,
-                 point_indices: Optional[List[Tuple[str, int]]] = None,
-                 overlap: Optional[List[Tuple[str, int]]] = None):
+    def __init__(self, ds: xr.Dataset, chunk_indices: list = None,
+                 rand_chunk: bool = True, drop_nan: bool = True,
+                 strict_nan: bool = False, drop_nan_masked: bool = False,
+                 use_filter: bool = True, drop_sample: bool = False,
+                 fill_method: str = None, const: float = None,
+                 filter_var: str = 'land_mask', patience: int = 500,
+                 block_size: Optional[List[Tuple[str, int]]] = None,
+                 sample_size: Optional[List[Tuple[str, int]]] = None,
+                 overlap: Optional[List[Tuple[str, int]]] = None,
+                 num_chunks: int = None):
         """
-        Initialize xarray dataset.
+        Initialize xarray dataset. Creates A list of processed data chunks.
 
-        Args:
+        Attributes:
             ds (xr.Dataset): The input dataset.
-            num_chunks (int): The number of unique chunks to process.
+            chunk_indices (list): List of indices specifying which chunks to process.
             rand_chunk (bool): If true, chunks are chosen randomly.
             drop_nan (bool): If true, NaN values are dropped.
             strict_nan (bool): If true, discard the entire chunk if any NaN is found in any variable.
-            filter_var (str): The variable to use for filtering. Defaults to 'land_mask'.
-                              If None, no filtering is applied.
+            drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
+            use_filter (bool): If true, apply the filter based on the specified filter_var.
+            drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
+            fill_method (str): Method to fill masked data, if any.
+            const (float): Constant value to use for filling masked data, if needed.
+            filter_var (str): The variable to use for filtering.
             patience (int): The number of consecutive iterations without a valid chunk before stopping.
-
-        Returns:
-            list: A list of processed data chunks.
+            block_size (Optional[List[Tuple[str, int]]]): Block sizes for considered blocks (of (sub-)chunks).
+            sample_size (Optional[List[Tuple[str, int]]]): Sample size for chunk splitting.
+            overlap (Optional[List[Tuple[str, int]]]): Overlap for overlapping samples due to chunk splitting.
+            total_chunks (int): Total number of chunks in the dataset.
+            num_chunks (int): The number of unique chunks to process.
+            chunks (list): List of processed data chunks.
+            dataset (dict): Concatenated dataset from the processed chunks.
         """
         self.ds = ds
+        self.chunk_indices = chunk_indices
         self.rand_chunk = rand_chunk
         self.drop_nan = drop_nan
         self.strict_nan = strict_nan
+        self.drop_nan_masked = drop_nan_masked
+        self.use_filter = use_filter
+        self.drop_sample = drop_sample
+        self.fill_method = fill_method
+        self.const = const
         self.filter_var = filter_var
         self.patience = patience
-        self.block_sizes = block_sizes
-        self.point_indices = point_indices
+        self.block_size = block_size
+        self.sample_size = sample_size
         self.overlap = overlap
-        self.total_chunks = calculate_total_chunks(self.ds, self.block_sizes)
-        self.chunks = None
-        self.chunk_indices = chunk_indices
+        self.total_chunks = calculate_total_chunks(self.ds, self.block_size)
 
         if not self.chunk_indices is None:
             self.num_chunks = len(self.chunk_indices)
@@ -49,13 +65,26 @@ class XrDataset():
         else:
             self.num_chunks = self.total_chunks
 
+        self.chunks = None
         self.chunks = self.get_chunks()
         self.dataset = self.concatenate_chunks()
 
     def get_dataset(self):
+        """
+        Get the processed dataset.
+
+        Returns:
+            dict: Concatenated dataset from the processed chunks.
+        """
         return self.dataset
 
     def concatenate_chunks(self):
+        """
+        Concatenate the chunks along the time dimension.
+
+        Returns:
+            dict: A dictionary of concatenated data chunks.
+        """
         concatenated_chunks = {}
 
         # Get the keys of the first dictionary in self.chunks
@@ -70,35 +99,53 @@ class XrDataset():
         return concatenated_chunks
 
     def preprocess_chunk(self, chunk):
-        # Flatten the data and select only land values, then drop NaN values
+        """
+        Preprocess a single chunk of data.
 
-        if self.point_indices is not None:
+        Args:
+            chunk (dict): A dictionary containing the data chunk to preprocess.
+
+        Returns:
+            tuple: A tuple containing the preprocessed chunk and a boolean indicating if the chunk is valid.
+        """
+
+        # Split a chunk into samples
+        if self.sample_size is not None:
             cf = {x: chunk[x] for x in chunk.keys()}
-            cf = split_chunk(cf, self.point_indices, overlap=self.overlap)
+            cf = split_chunk(cf, self.sample_size, overlap=self.overlap)
 
         else:
             cf = {x: chunk[x].ravel() for x in chunk.keys()}
 
         # Apply filtering based on the specified variable, if provided
-        if not self.filter_var is None:
-            cft = apply_filter(cf, self.filter_var)
+        if self.use_filter:
+            cft = apply_filter(cf, self.filter_var, self.drop_sample)
         else:
             cft = cf
 
         valid_chunk = True
-#
+
         if self.drop_nan:
             vars = list(cft.keys())
-            cft = drop_nan_values(cft, vars)
+            if self.drop_nan_masked:
+                cft = drop_nan_values(cft, vars, self.filter_var)
+            else:
+                cft = drop_nan_values(cft, vars)
             valid_chunk = all(np.nan_to_num(cft[var]).sum() > 0 for var in cf)
             if self.strict_nan:
                 valid_chunk = any(np.nan_to_num(cft[var]).sum() > 0 for var in cf)
+
+        if valid_chunk:
+            if self.fill_method is not None:
+                vars = [var for var in cft.keys() if var != 'split' and var != self.filter_var]
+                cft = fill_masked_data(cft, vars, self.fill_method, self.const)
 
         return cft, valid_chunk
 
     def get_chunks(self):
         """
         Retrieve specific chunks of data from a dataset.
+
         Returns:
             list: A list of processed data chunks.
         """

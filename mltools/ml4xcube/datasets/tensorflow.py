@@ -1,38 +1,55 @@
 import random
+import numpy as np
 import xarray as xr
 import tensorflow as tf
-from typing import Tuple, Optional, Dict, List
+from typing import Tuple, Optional, List
 from ml4xcube.cube_utilities import split_chunk
-from ml4xcube.preprocessing import apply_filter, drop_nan_values
 from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks
+from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_masked_data
 
 
 class LargeScaleXrDataset:
-    def __init__(self, xr_dataset: xr.Dataset, chunk_indices: list = None, num_chunks: int = None,
-                 rand_chunk: bool = True, drop_nan: bool = True, filter_var: str = 'land_mask', callback_fn=None,
-                 block_sizes: Optional[Dict[str, Optional[int]]] = None,
-                 point_indices: Optional[List[Tuple[str, int]]] = None,
+    def __init__(self, xr_dataset: xr.Dataset, rand_chunk: bool = True, drop_nan: bool = True,
+                 chunk_indices: list = None, drop_nan_masked: bool = False, use_filter: bool = True,
+                 drop_sample: bool = False, fill_method: str = None, const: float = None,
+                 filter_var: str = 'land_mask', num_chunks: int = None, callback_fn = None,
+                 block_sizes: Optional[List[Tuple[str, int]]] = None,
+                 sample_size: Optional[List[Tuple[str, int]]] = None,
                  overlap: Optional[List[Tuple[str, int]]] = None):
         """
         Initialize the dataset for TensorFlow, managing large datasets efficiently.
 
-        Args:
-            xr_dataset (xr.Dataset): The xarray dataset.
-            chunk_indices (list): List of indices of chunks to load.
-            num_chunks (int): Number of chunks to process dynamically.
+        Attributes:
+            ds (xr.Dataset): The xarray dataset.
             rand_chunk (bool): Whether to select chunks randomly.
             drop_nan (bool): Whether to drop NaN values.
-            filter_var (str): Filtering variable name, default 'land_mask'.
+            drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
+            use_filter (bool): If true, apply the filter based on the specified filter_var.
+            drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
+            fill_method (str): Method to fill masked data, if any.
+            const (float): Constant value to use for filling masked data, if needed.
+            filter_var (str): Filtering variable name.
+            num_chunks (int): Number of chunks to process dynamically.
+            callback_fn (callable): Function to apply to each chunk after preprocessing.
+            block_sizes (Optional[List[Tuple[str, int]]]): Block sizes for considered blocks (of (sub-)chunks).
+            sample_size (Optional[List[Tuple[str, int]]]): Sample size for chunk splitting.
+            overlap (Optional[List[Tuple[str, int]]]): Overlap for overlapping samples due to chunk splitting.
+            total_chunks (int): Total number of chunks in the dataset.
+            chunk_indices (list): List of indices specifying which chunks to process.
         """
-        self.chunk_indices = None
         self.ds = xr_dataset
-        self.num_chunks = num_chunks
         self.rand_chunk = rand_chunk
-        self.callback_fn = callback_fn
         self.drop_nan = drop_nan
+        self.drop_nan_masked = drop_nan_masked
+        self.use_filter = use_filter
+        self.drop_sample = drop_sample
+        self.fill_method = fill_method
+        self.const = const
         self.filter_var = filter_var
+        self.num_chunks = num_chunks
+        self.callback_fn = callback_fn
         self.block_sizes = block_sizes
-        self.point_indices = point_indices
+        self.sample_size = sample_size
         self.overlap = overlap
         self.total_chunks = calculate_total_chunks(xr_dataset)
         if not chunk_indices is None:
@@ -43,6 +60,12 @@ class LargeScaleXrDataset:
             self.chunk_indices = list(range(self.total_chunks))
 
     def __len__(self):
+        """
+        Return the number of chunks.
+
+        Returns:
+            int: Number of chunks.
+        """
         return len(self.chunk_indices)
 
     def generate(self):
@@ -50,24 +73,35 @@ class LargeScaleXrDataset:
         Generator function to yield chunks.
 
         Yields:
-            Processed chunk as a dictionary of NumPy arrays.
+            dict: Processed chunk as a dictionary of NumPy arrays.
         """
         for idx in self.chunk_indices:
             chunk = get_chunk_by_index(self.ds, idx)
 
-            if self.point_indices is not None:
+            if self.sample_size is not None:
                 cf = {x: chunk[x] for x in chunk.keys()}
-                cf = split_chunk(cf, self.point_indices, overlap=self.overlap)
+                cf = split_chunk(cf, self.sample_size, overlap=self.overlap)
             else:
                 cf = {x: chunk[x].ravel() for x in chunk.keys()}
 
-            if not self.filter_var is None:
-                cft = apply_filter(cf, self.filter_var)
+            if self.use_filter:
+                cft = apply_filter(cf, self.filter_var, self.drop_sample)
             else:
                 cft = cf
 
             if self.drop_nan:
-                cft = drop_nan_values(cft, list(cft.keys()))
+                vars = list(cft.keys())
+                if self.drop_nan_masked:
+                    cft = drop_nan_values(cft, vars, self.filter_var)
+                else:
+                    cft = drop_nan_values(cft, vars)
+
+            valid_chunk = all(np.nan_to_num(cft[var]).sum() > 0 for var in cf)
+
+            if valid_chunk:
+                if self.fill_method is not None:
+                    vars = [var for var in cft.keys() if var != 'split' and var != self.filter_var]
+                    cft = fill_masked_data(cft, vars, self.fill_method, self.const)
 
             if self.callback_fn:
                 cft = self.callback_fn(cft)
@@ -97,21 +131,19 @@ class LargeScaleXrDataset:
         )
 
 
-
-
 def prepare_dataset(dataset: tf.data.Dataset, batch_size: int, shuffle: bool = True, num_parallel_calls: int = None, distributed: bool = False) -> tf.data.Dataset:
     """
     Prepares a TensorFlow dataset for training or evaluation.
 
-    Parameters:
-    - dataset: The TensorFlow dataset from which to load the data.
-    - batch_size: How many samples per batch to load.
-    - shuffle: Whether to shuffle the dataset.
-    - num_parallel_calls: How many threads to use for parallel processing of data loading.
-    - distributed: Specifies if distributed training is performed.
+    Args:
+        dataset (tf.data.Dataset): The TensorFlow dataset from which to load the data.
+        batch_size (int): How many samples per batch to load.
+        shuffle (bool): Whether to shuffle the dataset. Defaults to True.
+        num_parallel_calls (int, optional): How many threads to use for parallel processing of data loading. Defaults to None.
+        distributed (bool): Specifies if distributed training is performed. Defaults to False.
 
     Returns:
-    A TensorFlow Dataset object ready for iteration.
+        tf.data.Dataset: A TensorFlow Dataset object ready for iteration.
     """
     if distributed:
         options = tf.data.Options()
