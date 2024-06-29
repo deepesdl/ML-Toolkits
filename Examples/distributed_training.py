@@ -37,7 +37,7 @@ def map_function(batch):
         y = torch.empty((1, 0))
     else:
         # Extract the arrays from the list of dictionaries
-        air_temperature_2m_list = []
+        air_temperature_2m_list       = []
         land_surface_temperature_list = []
 
         for d in batch:
