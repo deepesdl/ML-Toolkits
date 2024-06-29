@@ -2,12 +2,19 @@ import itertools
 import rechunker
 import numpy as np
 import xarray as xr
-from typing import Sequence, Tuple, Iterator, Dict, List, Optional
 import dask.array as da
+from typing import Tuple, Iterator, Dict, List, Optional
 
-def get_chunk_sizes(ds: xr.Dataset) -> Sequence[Tuple[str, int]]:
-    """Determine maximum chunk sizes of all data variables of dataset *ds*.
-    Helper function.
+
+def get_chunk_sizes(ds: xr.Dataset) -> List[Tuple[str, int]]:
+    """
+    Determine maximum chunk sizes of all data variables of the dataset.
+
+    Args:
+        ds (xr.Dataset): The xarray dataset.
+
+    Returns:
+        List[Tuple[str, int]]: A list of tuples where each tuple contains a dimension name and its maximum chunk size.
     """
     chunk_sizes = {}
     for var in ds.data_vars.values():
@@ -20,25 +27,27 @@ def get_chunk_sizes(ds: xr.Dataset) -> Sequence[Tuple[str, int]]:
     return [(str(k), v) for k, v in chunk_sizes.items()]
 
 
-def iter_data_var_blocks(ds: xr.Dataset,
-                         block_sizes: Sequence[Tuple[str, int]] = None) \
+def iter_data_var_blocks(ds: xr.Dataset, block_size: Optional[List[Tuple[str, int]]] = None) \
         -> Iterator[Dict[str, np.ndarray]]:
-    """Create an iterator that will provide all data blocks of all data
-    variables of given dataset *ds*.
-
-    The data blocks' order and shapes are predescribed
-    by *block_sizes* argument, which is a seqence comprising
-    dimension name and block size pairs. If *block_size is not given,
-    the chunk sizes of data variables are used instead.
     """
-    block_sizes = get_chunk_sizes(ds) if block_sizes is None else block_sizes
+    Create an iterator that provides all data blocks of all data variables of the given dataset.
+
+    Args:
+        ds (xr.Dataset): The xarray dataset.
+        block_size (Optional[List[Tuple[str, int]]]): A sequence comprising dimension name and block size pairs.
+            If not given, the chunk sizes of data variables are used instead.
+
+    Yields:
+        Iterator[Dict[str, np.ndarray]]: An iterator of dictionaries where keys are variable names and values are data blocks as numpy arrays.
+    """
+    block_size = get_chunk_sizes(ds) if block_size is None else block_size
     dim_ranges = []
-    for dim_name, chunk_size in block_sizes:
+    for dim_name, chunk_size in block_size:
         dim_size = ds.dims[dim_name]
         dim_ranges.append(range(0, dim_size, chunk_size))
     for offsets in itertools.product(*dim_ranges):
         dim_slices = {block_size[0]: slice(offset, offset + block_size[1])
-                      for block_size, offset in zip(block_sizes, offsets)}
+                      for block_size, offset in zip(block_size, offsets)}
         var_blocks = {}
         for var_name, var in ds.data_vars.items():
             indexers = {dim_name: dim_slice
@@ -48,8 +57,18 @@ def iter_data_var_blocks(ds: xr.Dataset,
         yield var_blocks
 
 
-def calculate_total_chunks(ds: xr.Dataset, block_size: Sequence[Tuple[str, int]] = None) -> int:
-    """Calculate the total number of chunks for the dataset based on maximum chunk sizes."""
+def calculate_total_chunks(ds: xr.Dataset, block_size: Optional[List[Tuple[str, int]]] = None) -> int:
+    """
+    Calculate the total number of chunks for the dataset based on maximum chunk sizes.
+
+    Args:
+        ds (xr.Dataset): The xarray dataset.
+        block_size (Optional[List[Tuple[str, int]]]): A sequence of tuples specifying the block size for each dimension.
+            If not provided, the function will use the dataset's chunk sizes.
+
+    Returns:
+        int: The total number of chunks.
+    """
     default_block_sizes = get_chunk_sizes(ds)
 
     if block_size is not None:
@@ -68,20 +87,20 @@ def calculate_total_chunks(ds: xr.Dataset, block_size: Sequence[Tuple[str, int]]
     return total_chunks
 
 
-def get_chunk_by_index(ds: xr.Dataset, index: int, block_size: Sequence[Tuple[str, int]] = None) -> Dict[
+def get_chunk_by_index(ds: xr.Dataset, index: int, block_size: Optional[List[Tuple[str, int]]] = None) -> Dict[
     str, np.ndarray]:
     """
     Returns a specific data chunk from an xarray.Dataset by index.
 
-    Parameters:
-    - ds: The xarray.Dataset from which to retrieve a chunk.
-    - index: The linear index of the chunk to retrieve.
-    - block_size: An optional sequence of tuples specifying the block size for each dimension.
-                  Each tuple should contain a dimension name and a block size for that dimension.
-                  If not provided, the function will attempt to use the dataset's chunk sizes.
+    Args:
+        ds (xr.Dataset): The xarray.Dataset from which to retrieve a chunk.
+        index (int): The linear index of the chunk to retrieve.
+        block_size (Optional[List[Tuple[str, int]]]): An optional sequence of tuples specifying the block size for each dimension.
+            Each tuple should contain a dimension name and a block size for that dimension.
+            If not provided, the function will attempt to use the dataset's chunk sizes.
 
     Returns:
-    A dictionary where keys are variable names and values are the chunk data as numpy arrays.
+        Dict[str, np.ndarray]: A dictionary where keys are variable names and values are the chunk data as numpy arrays.
     """
     # Get the default chunk sizes from the dataset
     default_block_sizes = get_chunk_sizes(ds)
@@ -123,22 +142,16 @@ def rechunk_cube(source_cube: xr.DataArray, target_chunks: dict | tuple | list, 
     """
     Rechunks an xarray DataArray to a new chunking scheme.
 
-    Parameters:
-    - source_cube: xr.DataArray
-      The input DataArray that you want to rechunk.
-
-    - target_chunks: dict | tuple | list
-      The desired chunk sizes for the rechunking operation.
-      If a dict, specify sizes for each named dimension, e.g., {'lon': 60, 'lat': 1, 'time': 100}.
-      If a tuple or list, specify sizes by order, corresponding to the array's dimensions.
-
-    - target_path: str
-      The path where the rechunked DataArray should be stored, typically a path to a Zarr store.
+    Args:
+        source_cube (xr.DataArray): The input DataArray that you want to rechunk.
+        target_chunks (Dict | Tuple | List): The desired chunk sizes for the rechunking operation.
+            If a dict, specify sizes for each named dimension, e.g., {'lon': 60, 'lat': 1, 'time': 100}.
+            If a tuple or list, specify sizes by order, corresponding to the array's dimensions.
+        target_path (str): The path where the rechunked DataArray should be stored, typically a path to a Zarr store.
 
     Returns:
-    Nothing, but prints a message upon successful completion.
+        None: Prints a message upon successful completion.
     """
-
     # Validate target_chunks input
     if not isinstance(target_chunks, (dict, tuple, list)):
         raise ValueError("target_chunks must be a dictionary, tuple, or list")
@@ -152,27 +165,28 @@ def rechunk_cube(source_cube: xr.DataArray, target_chunks: dict | tuple | list, 
     print("Rechunking completed successfully.")
 
 
-def split_chunk(chunk: Dict[str, np.ndarray], point_indices: List[Tuple[str, int]],
+def split_chunk(chunk: Dict[str, np.ndarray], sample_size: List[Tuple[str, int]],
                 overlap: Optional[List[Tuple[str, int]]] = None) -> Dict[str, np.ndarray]:
     """
     Split a chunk into points based on provided indices.
 
-    Parameters:
-    - chunk: The chunk to split.
-    - point_indices: Specific indices for extracting data points.
+    Args:
+        chunk (Dict[str, np.ndarray]): The chunk to split.
+        sample_size (List[Tuple[str, int]]): Specific indices for extracting data points.
+        overlap (Optional[List[Tuple[str, int]]]): Overlap for overlapping samples due to chunk splitting.
 
     Returns:
-    A dictionary where keys are variable names and values are the extracted points as numpy arrays.
+        Dict[str, np.ndarray]: A dictionary where keys are variable names and values are the extracted points as numpy arrays.
     """
 
-    # Extract the step sizes from the point_indices
-    step_sizes = [step for _, step in point_indices]
+    # Extract the step sizes from the sample_size
+    step_sizes = [step for _, step in sample_size]
 
     # Handle overlaps
     if overlap:
         overlap_steps = [
             int(step * overlap_frac) if step > 1 else 0
-            for (_, step), (_, overlap_frac) in zip(point_indices, overlap)
+            for (_, step), (_, overlap_frac) in zip(sample_size, overlap)
         ]
     else:
         overlap_steps = [0] * len(step_sizes)
@@ -217,14 +231,15 @@ def split_chunk(chunk: Dict[str, np.ndarray], point_indices: List[Tuple[str, int
 
 def assign_dims(data: Dict[str, da.Array|xr.DataArray], dims: Tuple) -> Dict[str, xr.DataArray]:
     """
-    Assign dimension names to data cube and convert them to xarray DataArray.
+    Split a chunk into points based on provided indices.
 
     Args:
-        data (Dict[str, da.Array]): Dictionary containing Dask arrays.
-        dims (Tuple): Tuple containing dimension names.
+        chunk (Dict[str, np.ndarray]): The chunk to split.
+        sample_size (List[Tuple[str, int]]): Specific indices for extracting data points.
+        overlap (Optional[List[Tuple[str, int]]]): Overlap for overlapping samples due to chunk splitting.
 
     Returns:
-        Dict[str, xr.DataArray]: Dictionary containing xarray DataArray with assigned dimensions.
+        Dict[str, np.ndarray]: A dictionary where keys are variable names and values are the extracted points as numpy arrays.
     """
     result = {}
     for var, dask_array in data.items():
