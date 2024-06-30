@@ -18,8 +18,8 @@ def apply_filter(ds, filter_var, drop_sample=False) -> Dict[str, np.ndarray]:
         Dict[str, np.ndarray]: The filtered dataset.
     """
     if filter_var and filter_var in ds:
-        filter_mask = ds[filter_var]
         valid_mask_lists = list()
+        filter_mask = ds[filter_var]
         for key, value in ds.items():
             if key == filter_var or key == 'split': continue
             if value.ndim == 1:  # List of points
@@ -37,9 +37,9 @@ def apply_filter(ds, filter_var, drop_sample=False) -> Dict[str, np.ndarray]:
             else:
                 return ds
 
-    if len(valid_mask_lists) > 0:
-        valid_mask = np.all(valid_mask_lists, axis=0)
-        ds = {x: ds[x][valid_mask] for x in ds.keys()}
+        if len(valid_mask_lists) > 0:
+            valid_mask = np.all(valid_mask_lists, axis=0)
+            ds = {x: ds[x][valid_mask] for x in ds.keys()}
 
     return ds
 
