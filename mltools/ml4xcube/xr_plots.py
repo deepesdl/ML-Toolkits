@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 def plot_slice(
         df, var_to_plot, xdim, ydim, title='Geographic Plot', label='Geographic Plot [K]', color_map='viridis',
         xlabel='Longitude', ylabel='Latitude', save_fig=False, file_name='plot.png', fig_size=(15, 10),
-        edge_color='black', base_map='naturalearth_lowres', marker='o', vmin=None, vmax=None, ticks=None):
+        edge_color='black', base_map='naturalearth_lowres', marker='o', vmin=None, vmax=None, ticks=None) -> None:
     """
-    Plots geographic data from a DataFrame with a base map for context.
+    Plots data cube slice from a DataFrame with an optional base map for context.
 
-    Parameters:
+    Args:
         df (DataFrame): DataFrame containing the latitude and longitude and data to plot.
         var_to_plot (str): Name of the column which contains the data to visualize.
         xdim (str): Name of the x dimension to plot.
@@ -22,9 +22,12 @@ def plot_slice(
         fig_size (tuple): Size of the figure to create.
         edge_color (str): Color of the edges of the base map.
         marker (str): Marker style.
-        vmin (float): Minimum data value that corresponds to the lower limit of the colormap.
-        vmax (float): Maximum data value that corresponds to the upper limit of the colormap.
-        ticks (list): List of two elements defining the min and max values for color bar ticks.
+        vmin (Optional[float]): Minimum data value that corresponds to the lower limit of the colormap.
+        vmax (Optional[float]): Maximum data value that corresponds to the upper limit of the colormap.
+        ticks (Optional[List]): List of two elements defining the min and max values for color bar ticks.
+
+    Returns:
+        None
     """
     plt.ioff()
 

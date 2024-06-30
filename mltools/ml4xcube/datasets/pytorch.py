@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 from ml4xcube.cube_utilities import split_chunk
 from torch.utils.data import Dataset, DataLoader
-from typing import Tuple, Optional, List, Callable
+from typing import Tuple, Optional, List, Callable, Dict
 from ml4xcube.cube_utilities import calculate_total_chunks, get_chunk_by_index
 from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_masked_data
 
@@ -59,7 +59,7 @@ class LargeScaleXrDataset(Dataset):
         else:
             self.chunk_indices = range(self.total_chunks)
 
-    def __len__(self):
+    def __len__(self) -> int:
         """
         Return the total number of chunks.
 
@@ -68,7 +68,7 @@ class LargeScaleXrDataset(Dataset):
         """
         return len(self.chunk_indices)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict[str, np.ndarray]:
         """
         Retrieve a chunk by its index and preprocess it.
 
@@ -76,7 +76,7 @@ class LargeScaleXrDataset(Dataset):
             idx (int): Index of the chunk to retrieve.
 
         Returns:
-            dict: A dictionary containing the processed chunk.
+            Dict[str, np.ndarray]: A dictionary containing the processed chunk.
         """
         chunk_index = self.chunk_indices[idx]
 

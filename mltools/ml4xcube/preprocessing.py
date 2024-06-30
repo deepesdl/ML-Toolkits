@@ -1,9 +1,9 @@
 import numpy as np
 import xarray as xr
-from typing import Dict
+from typing import Dict, List
 
 
-def apply_filter(ds, filter_var, drop_sample=False):
+def apply_filter(ds, filter_var, drop_sample=False) -> Dict[str, np.ndarray]:
     """
     Apply a filter to the dataset. If drop_sample is True and any value in a subarray does not belong to the mask (False),
     drop the entire subarray. If drop_sample is False, set all values to NaN which do not belong to the mask (False).
@@ -52,7 +52,7 @@ def drop_nan_values(ds: Dict[str, np.ndarray], vars: list, filter_var: str = Non
     Args:
         ds (Dict[str, np.ndarray]): The dataset to filter. It should be a dictionary where keys are variable names and values are numpy arrays.
         vars (list): The variables to check for NaN values.
-        filter_var (str): The name of the mask variable in the dataset. If None, drop the entire subarray.
+        filter_var (Optional[str]): The name of the mask variable in the dataset. If None, drop the entire subarray.
 
     Returns:
         Dict[str, np.ndarray]: The filtered dataset.
@@ -128,7 +128,7 @@ def fill_masked_data(ds: Dict[str, np.ndarray], vars: list, method: str = 'mean'
     return ds
 
 
-def get_range(ds: xr.Dataset, var: str):
+def get_range(ds: xr.Dataset, var: str) -> List[float]:
     """
     Returns min and max values of the variable `var` of xarray dataset `ds`.
 
@@ -149,7 +149,7 @@ def get_range(ds: xr.Dataset, var: str):
     return [min, max]
 
 
-def get_statistics(ds: xr.Dataset, var: str):
+def get_statistics(ds: xr.Dataset, var: str) -> List[float]:
     """
     Returns mean and std values of the variable `var` of xarray dataset `ds`.
 
@@ -171,7 +171,7 @@ def get_statistics(ds: xr.Dataset, var: str):
     return [mean, std]
 
 
-def normalize(x: np.ndarray, xmin: float, xmax: float):
+def normalize(x: np.ndarray, xmin: float, xmax: float) -> np.ndarray:
     """
     Perform min-max feature scaling of `x`, shifting values to range [0,1].
 
@@ -186,7 +186,7 @@ def normalize(x: np.ndarray, xmin: float, xmax: float):
     return (x - xmin) / (xmax - xmin)
 
 
-def standardize(x: np.ndarray, xmean: float, xstd: float):
+def standardize(x: np.ndarray, xmean: float, xstd: float) -> np.ndarray:
     """
     Transforms the distribution to mean 0 and variance 1.
 

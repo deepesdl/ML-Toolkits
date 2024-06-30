@@ -2,7 +2,7 @@ import random
 import numpy as np
 import xarray as xr
 import tensorflow as tf
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict
 from ml4xcube.cube_utilities import split_chunk
 from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks
 from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_masked_data
@@ -26,16 +26,16 @@ class LargeScaleXrDataset:
             drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
             use_filter (bool): If true, apply the filter based on the specified filter_var.
             drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
-            fill_method (str): Method to fill masked data, if any.
-            const (float): Constant value to use for filling masked data, if needed.
+            fill_method (Optional[str]): Method to fill masked data, if any.
+            const (Optional[float]): Constant value to use for filling masked data, if needed.
             filter_var (str): Filtering variable name.
-            num_chunks (int): Number of chunks to process dynamically.
-            callback_fn (callable): Function to apply to each chunk after preprocessing.
+            num_chunks (Optional[int]): Number of chunks to process dynamically.
+            callback_fn (Optional[Callable]): Function to apply to each chunk after preprocessing.
             block_sizes (Optional[List[Tuple[str, int]]]): Block sizes for considered blocks (of (sub-)chunks).
             sample_size (Optional[List[Tuple[str, int]]]): Sample size for chunk splitting.
             overlap (Optional[List[Tuple[str, int]]]): Overlap for overlapping samples due to chunk splitting.
             total_chunks (int): Total number of chunks in the dataset.
-            chunk_indices (list): List of indices specifying which chunks to process.
+            chunk_indices (List[int]): List of indices specifying which chunks to process.
         """
         self.ds = xr_dataset
         self.rand_chunk = rand_chunk
@@ -59,7 +59,7 @@ class LargeScaleXrDataset:
         else:
             self.chunk_indices = list(range(self.total_chunks))
 
-    def __len__(self):
+    def __len__(self) -> int:
         """
         Return the number of chunks.
 
@@ -68,7 +68,7 @@ class LargeScaleXrDataset:
         """
         return len(self.chunk_indices)
 
-    def generate(self):
+    def generate(self) -> Dict[str, np.ndarray]:
         """
         Generator function to yield chunks.
 
@@ -108,7 +108,7 @@ class LargeScaleXrDataset:
 
             yield cft
 
-    def get_dataset(self):
+    def get_dataset(self) -> tf.data.Dataset:
         """
         Creates a TensorFlow dataset from the generator.
 

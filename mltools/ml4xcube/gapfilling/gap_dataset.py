@@ -4,6 +4,7 @@ import shutil
 import datetime
 import numpy as np
 import xarray as xr
+from typing import Dict, List, Union, Optional
 
 """
 In this file we prepare the data for the gapfilling algorithm. 
@@ -13,23 +14,23 @@ If requested artificial gaps can be inserted in the array.
 
 
 class GapDataset:
-    """
-    Represents a dataset for handling data gaps.
+    def __init__(self, ds: xr.DataArray, ds_name: str = 'Test123',
+                 dimensions: Optional[Dict[str, tuple]] = None,
+                 artificial_gaps: Optional[List[float]] = None,
+                 actual_matrix: Union[str, datetime.date] = 'Random'):
+        """
+        Represents a dataset for handling data gaps.
 
-    Attributes:
-        ds (xarray.DataArray): The original unsliced dataset.
-        ds_name (str): The name of the dataset.
-        dimensions (dict): Dict containing dimension ranges (e.g. lat, lon, times); sample values if no dim specified
-        artificial_gaps (list): List of artificial gap sizes; None if no artificial gaps should be created
-        actual_matrix (str or datetime.date): Specifies the actual data matrix or 'Random' for random selection.
-        directory (str): The directory where data will be stored.
-        extra_data: Additional data used as predictors (e.g. Land Cover Classes).
-        sliced_ds: The sliced dataset.
-
-    """
-    def __init__(self, ds, ds_name='Test123',
-                 dimensions=None,
-                 artificial_gaps=None, actual_matrix='Random'):
+        Attributes:
+            ds (xr.DataArray): The original unsliced dataset.
+            ds_name (str): The name of the dataset.
+            dimensions (Optional[Dict[str, tuple]]): Dict containing dimension ranges (e.g. lat, lon, times); sample values if no dim specified.
+            artificial_gaps (Optional[List[float]]): List of artificial gap sizes; None if no artificial gaps should be created.
+            actual_matrix (Union[str, datetime.date]): Specifies the actual data matrix or 'Random' for random selection.
+            directory (str): The directory where data will be stored.
+            extra_data (xr.DataArray): Additional data used as predictors (e.g. Land Cover Classes).
+            sliced_ds (xr.DataArray): The sliced dataset.
+        """
         self.ds = ds
         self.ds_name = ds_name
         self.dimensions = dimensions
@@ -41,16 +42,19 @@ class GapDataset:
         self.extra_data = None
         self.sliced_ds = None
 
-    def get_data(self):
+    def get_data(self) -> None:
         """
-         Retrieve and process (area-)specific data.
+        Retrieve and process (area-)specific data.
 
-         This method performs the following tasks:
-         - Creates a directory or cleans it if it already exists.
-         - Slices the dimensions from a global dataset.
-         - Retrieves additional data (e.g., land cover classes) for use as predictors.
-         - Process the data and optionally creates artificial data gaps for gap filling.
-         """
+        This method performs the following tasks:
+        - Creates a directory or cleans it if it already exists.
+        - Slices the dimensions from a global dataset.
+        - Retrieves additional data (e.g., land cover classes) for use as predictors.
+        - Processes the data and optionally creates artificial data gaps for gap filling.
+
+        Returns:
+            None
+        """
         start_time = time.time()
 
         # Create a directory or clean it if it already exists
@@ -65,7 +69,7 @@ class GapDataset:
 
         print("runtime:", round(time.time() - start_time, 2))
 
-    def slice_dataset(self):
+    def slice_dataset(self) -> None:
         """
         Slice the dataset to extract the specific area, latitude, longitude, and time range.
 
@@ -91,7 +95,7 @@ class GapDataset:
         sliced_ds.to_zarr(self.directory + "cube.zarr")
         self.sliced_ds = xr.open_zarr(self.directory + "cube.zarr")[sliced_ds.name]
 
-    def get_extra_matrix(self):
+    def get_extra_matrix(self) -> None:
         """
         Retrieve Land Cover Classes (LCC) for use as predictors.
 
@@ -117,7 +121,7 @@ class GapDataset:
                                           lon=slice(self.dimensions['lon'][0], self.dimensions['lon'][1]))
         self.extra_data.to_zarr(self.directory + "extra_matrix_lcc.zarr")
 
-    def process_actual_matrix(self):
+    def process_actual_matrix(self) -> None:
         """
         Process the actual data matrix.
 
@@ -145,14 +149,14 @@ class GapDataset:
         if self.artificial_gaps:
             self.create_gaps(actual_matrix, actual_date)
 
-    def create_gaps(self, actual_matrix, actual_date):
+    def create_gaps(self, actual_matrix: xr.DataArray, actual_date: str) -> None:
         """
         Create artificial data gaps.
 
         This method creates artificial data gaps in the desired array based on the specified gap sizes.
 
         Args:
-            actual_matrix (xArray): Original array in which the gaps are created.
+            actual_matrix (xr.DataArray): Original array in which the gaps are created.
             actual_date (str): The date of the array.
 
         Returns:

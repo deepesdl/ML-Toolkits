@@ -1,7 +1,7 @@
 import random
 import numpy as np
 import xarray as xr
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict
 from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_masked_data
 from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks, split_chunk
 
@@ -18,28 +18,28 @@ class XrDataset():
                  overlap: Optional[List[Tuple[str, int]]] = None,
                  num_chunks: int = None):
         """
-        Initialize xarray dataset. Creates A list of processed data chunks.
+        Creates a dataset of processed data chunks.
 
         Attributes:
             ds (xr.Dataset): The input dataset.
-            chunk_indices (list): List of indices specifying which chunks to process.
+            chunk_indices (Optional[List[int]]): List of indices specifying which chunks to process.
             rand_chunk (bool): If true, chunks are chosen randomly.
             drop_nan (bool): If true, NaN values are dropped.
             strict_nan (bool): If true, discard the entire chunk if any NaN is found in any variable.
             drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
             use_filter (bool): If true, apply the filter based on the specified filter_var.
             drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
-            fill_method (str): Method to fill masked data, if any.
-            const (float): Constant value to use for filling masked data, if needed.
+            fill_method (Optional[str]): Method to fill masked data, if any.
+            const (Optional[float]): Constant value to use for filling masked data, if needed.
             filter_var (str): The variable to use for filtering.
             patience (int): The number of consecutive iterations without a valid chunk before stopping.
             block_size (Optional[List[Tuple[str, int]]]): Block sizes for considered blocks (of (sub-)chunks).
             sample_size (Optional[List[Tuple[str, int]]]): Sample size for chunk splitting.
             overlap (Optional[List[Tuple[str, int]]]): Overlap for overlapping samples due to chunk splitting.
             total_chunks (int): Total number of chunks in the dataset.
-            num_chunks (int): The number of unique chunks to process.
-            chunks (list): List of processed data chunks.
-            dataset (dict): Concatenated dataset from the processed chunks.
+            num_chunks (Optional[int]): The number of unique chunks to process.
+            chunks (List[Dict[str, np.ndarray]]): List of processed data chunks.
+            dataset (Dict[str, np.ndarray]): Concatenated dataset from the processed chunks.
         """
         self.ds = ds
         self.chunk_indices = chunk_indices
@@ -69,21 +69,21 @@ class XrDataset():
         self.chunks = self.get_chunks()
         self.dataset = self.concatenate_chunks()
 
-    def get_dataset(self):
+    def get_dataset(self) -> Dict[str, np.ndarray]:
         """
         Get the processed dataset.
 
         Returns:
-            dict: Concatenated dataset from the processed chunks.
+            Dict[str, np.ndarray]: Concatenated dataset from the processed chunks.
         """
         return self.dataset
 
-    def concatenate_chunks(self):
+    def concatenate_chunks(self) -> Dict[str, np.ndarray]:
         """
         Concatenate the chunks along the time dimension.
 
         Returns:
-            dict: A dictionary of concatenated data chunks.
+            Dict[str, np.ndarray]: A dictionary of concatenated data chunks.
         """
         concatenated_chunks = {}
 
@@ -98,17 +98,16 @@ class XrDataset():
 
         return concatenated_chunks
 
-    def preprocess_chunk(self, chunk):
+    def preprocess_chunk(self, chunk: Dict[str, np.ndarray]) -> Tuple[Dict[str, np.ndarray], bool]:
         """
         Preprocess a single chunk of data.
 
         Args:
-            chunk (dict): A dictionary containing the data chunk to preprocess.
+            chunk (Dict[str, np.ndarray]): A dictionary containing the data chunk to preprocess.
 
         Returns:
-            tuple: A tuple containing the preprocessed chunk and a boolean indicating if the chunk is valid.
+            Tuple[Dict[str, np.ndarray], bool]: A tuple containing the preprocessed chunk and a boolean indicating if the chunk is valid.
         """
-
         # Split a chunk into samples
         if self.sample_size is not None:
             cf = {x: chunk[x] for x in chunk.keys()}
@@ -142,14 +141,13 @@ class XrDataset():
 
         return cft, valid_chunk
 
-    def get_chunks(self):
+    def get_chunks(self) -> List[Dict[str, np.ndarray]]:
         """
         Retrieve specific chunks of data from a dataset.
 
         Returns:
-            list: A list of processed data chunks.
+            List[Dict[str, np.ndarray]]: A list of processed data chunks.
         """
-
         chunks_idx = list()
         chunks_list = []
         chunk_index = 0

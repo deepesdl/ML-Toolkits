@@ -10,7 +10,9 @@ from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks
 from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_masked_data
 
 
-def process_chunk(chunk, use_filter, drop_sample, filter_var, point_indices, overlap, callback_fn, drop_nan_masked, fill_method, const):
+def process_chunk(chunk: Dict[str, np.ndarray], use_filter: bool, drop_sample: bool, filter_var: str,
+                  sample_size: Optional[List[int]], overlap: Optional[List[int]], callback_fn, drop_nan_masked: bool,
+                  fill_method: Optional[str], const: Optional[float]) -> Tuple[Dict[str, np.ndarray], bool]:
     """
     Process a single chunk of data.
 
@@ -19,7 +21,7 @@ def process_chunk(chunk, use_filter, drop_sample, filter_var, point_indices, ove
         use_filter (bool): If true, apply the filter based on the specified filter_var.
         drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
         filter_var (str): The variable to use for filtering.
-        point_indices (optional): Indices for splitting the chunk into samples.
+        sample_size (optional): Indices for splitting the chunk into samples.
         overlap (optional): Overlap for overlapping samples due to chunk splitting.
         callback_fn (function, optional): Optional callback function to apply to each chunk after preprocessing.
         drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
@@ -29,9 +31,9 @@ def process_chunk(chunk, use_filter, drop_sample, filter_var, point_indices, ove
     Returns:
         tuple: A tuple containing the preprocessed chunk and a boolean indicating if the chunk is valid.
     """
-    if point_indices is not None:
+    if sample_size is not None:
         cf = {x: chunk[x] for x in chunk.keys()}
-        cf = split_chunk(cf, point_indices, overlap=overlap)
+        cf = split_chunk(cf, sample_size, overlap=overlap)
     else:
         cf = {x: chunk[x].ravel() for x in chunk.keys()}
 
@@ -58,15 +60,15 @@ def process_chunk(chunk, use_filter, drop_sample, filter_var, point_indices, ove
     return cft, valid_chunk
 
 
-def worker_preprocess_chunk(args):
+def worker_preprocess_chunk(args: Tuple) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
     """
     Worker function to preprocess a chunk in parallel.
 
     Args:
-        args (tuple): A tuple containing the arguments needed for processing the chunk.
+        args (Tuple): A tuple containing the arguments needed for processing the chunk.
 
     Returns:
-        tuple: A tuple containing the preprocessed training and testing chunks.
+        Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]: A tuple containing the preprocessed training and testing chunks.
     """
     chunk, use_filter, drop_sample, point_indices, overlap, filter_var, callback_fn, data_split, drop_nan_masked, fill_method, const = args
 
@@ -174,7 +176,7 @@ class MultiProcSampler():
         self.total_chunks = calculate_total_chunks(ds)
         self.create_cubes()
 
-    def store_chunks(self, processed_chunks):
+    def store_chunks(self, processed_chunks) -> None:
         """
         Store the processed chunks into the training and testing Zarr cubes.
 
@@ -213,7 +215,7 @@ class MultiProcSampler():
                     else:
                         self.test_store[var].append(test_var_data)
 
-    def create_cubes(self):
+    def create_cubes(self) -> None:
         """
         Create the training and testing cubes by processing chunks of data from the dataset.
 
@@ -229,10 +231,8 @@ class MultiProcSampler():
 
         with Pool(processes=self.nproc) as pool:
             for i in range(0, self.num_chunks, self.chunk_batch):
-                #print(f'index: {i}')
                 batch_indices = chunk_indices[i:i + self.chunk_batch]
                 batch_chunks = [get_chunk_by_index(self.ds, idx, block_size=self.block_size) for idx in batch_indices]
-                #print(batch_chunks[0]['land_mask'])
                 processed_chunks = pool.map(worker_preprocess_chunk, [
                     (chunk, self.use_filter, self.drop_sample, self.sample_size, self.overlap, self.filter_var, self.callback_fn, self.data_split, self.drop_nan_masked, self.fill_method, self.const)
                     for chunk in batch_chunks

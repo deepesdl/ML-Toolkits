@@ -1,6 +1,7 @@
-import numpy as np
-from tqdm import tqdm
 import sys
+import numpy as np
+import xarray as xr
+from tqdm import tqdm
 
 """
 Function get_insights(cube):
@@ -30,8 +31,18 @@ Example usage:
     get_gap_heat_map(ds)
 """
 
+
 # Function to get insights from the data cube
-def get_insights(cube):
+def get_insights(cube: xr.DataArray) -> None:
+    """
+    Extracts and prints various characteristics of the data cube.
+
+    Args:
+        cube (xr.DataArray): The input data cube.
+
+    Returns:
+        None
+    """
     # Extracting the variable's long name
     variable = cube.long_name
 
@@ -94,7 +105,16 @@ def get_insights(cube):
 
 
 # Function to generate a heat map of gap (NaN) counts for each lat/lon pixel
-def get_gap_heat_map(cube):
+def get_gap_heat_map(cube: xr.DataArray) -> xr.DataArray:
+    """
+    Generates a heat map of value counts (non-NaN values) for each latitude/longitude pixel.
+
+    Args:
+        cube (xr.DataArray): The input data cube.
+
+    Returns:
+        xr.DataArray: Heat map of non-NaN value counts for each lat/lon pixel.
+    """
     # Count the number of non-NaN values for each lat/lon pixel
     nan_counts = cube.shape[0] - np.isnan(cube).sum(dim='time')
     return nan_counts

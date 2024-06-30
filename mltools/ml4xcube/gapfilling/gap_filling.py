@@ -13,6 +13,7 @@ from sklearn.svm import SVR
 from scipy import interpolate
 from sklearn import preprocessing
 from multiprocessing.dummy import Pool
+from typing import List, Tuple, Union, Optional
 from sklearn.model_selection import KFold, cross_val_score
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 
@@ -30,46 +31,32 @@ class Gapfiller:
     The Gapfiller class fills gaps in cube data using machine learning models.
     It provides methods for data preprocessing, hyperparameter tuning, cross-validation, and prediction.
 
-    Parameters:
-        ds_name (str): The name of the dataset.
-        learning_function (str): The type of learning function.
-        hyperparameters (str): Hyperparameter search method ('RandomGridSearch' | 'FullGridSearch' | 'Custom').
-        predictor (str): Predictor strategy ('AllPoints' | 'LCC' | 'RandomPoints').
-
-    Attributes:
-        actual_matrix (np.ndarray): The actual data matrix with gaps.
-        data_with_gaps (dict): A dictionary containing data matrices with different gap sizes.
-        directory (str): The directory where results and data are stored.
-        gap_value (float): The gap value in the data (np.nan for real gaps and -100 for artificial gaps).
-        metadata (dict): Metadata associated with the dataset.
-        pool (multiprocessing.dummy.Pool): A pool of worker processes for parallelization.
-        scores (dict): Dictionary to store MAE scores for gap filling results.
-        temp_array_with_gaps (np.ndarray): Temporary data array with gaps for gap filling.
-        temp_known_pixels (int): Number of known pixels in the temporary data array.
-        training_data (ndarray): Historical data matrices.
-
-    Methods:
-    - gapfill(): Perform the gap filling process using the learning function for different gap sizes.
-    - get_arrays(): Retrieve data arrays and initialize necessary variables.
-    - print_insights(): Print insights about the gap-filling process.
-    - process_gap_array(gap_size): Process the gap-filling process for different gap sizes.
-    - fill_the_gaps(gap_indices): Fill the gaps in the data array using a pixel model.
-    - pixel_model(gap_index): Predict missing values for a specific pixel based on the chosen predictor.
-    - create_dataframe(coords): Create a dataframe from selected coordinates.
-    - get_random_points(): Get random non-gap coordinates for use as predictors.
-    - get_extra_matrix_points(gap_index): Get coordinates based on Land Cover Classification (LCC) for modeling.
-    - preprocess_dataframe(dataframe): Preprocess the dataframe, handling NaN values and cloud-covered areas.
-    - get_train_test_sets(dataframe): Split the dataframe into training and testing sets.
-    - process_results(gap_size, filled_array, actual_scores, validation_scores, start_time): Process and print gap filling results.
-    - train_model(X_train, y_train, X_test): Perform SVR training, hyperparameter tuning, and prediction.
-    - interpolation(gap_index): Perform nearest neighbor interpolation for gap filling.
-
     Example:
     ```
     Gapfill(ds_name='Test123', learning_function='SVR' hyperparameters='RandomGridSearch', predictor='LCC').gapfill()
     ```
     """
-    def __init__(self, ds_name="Test123", learning_function="SVR", hyperparameters="RandomGridSearch", predictor="RandomPoints"):
+    def __init__(self, ds_name: str = "Test123", learning_function: str = "SVR",
+                 hyperparameters: str = "RandomGridSearch", predictor: str = "RandomPoints"):
+        """
+        Initialize the Gapfiller class.
+
+        Attributes:
+            ds_name (str): The name of the dataset.
+            learning_function (str): The type of learning function.
+            hyperparameters (str): Hyperparameter search method ('RandomGridSearch' | 'FullGridSearch' | 'Custom').
+            predictor (str): Predictor strategy ('AllPoints' | 'LCC' | 'RandomPoints').
+            actual_matrix (np.ndarray): The actual data matrix with gaps.
+            data_with_gaps (dict): A dictionary containing data matrices with different gap sizes.
+            directory (str): The directory where results and data are stored.
+            gap_value (float): The gap value in the data (np.nan for real gaps and -100 for artificial gaps).
+            metadata (dict): Metadata associated with the dataset.
+            pool (multiprocessing.dummy.Pool): A pool of worker processes for parallelization.
+            scores (dict): Dictionary to store MAE scores for gap filling results.
+            temp_gap_array (np.ndarray): Temporary data array with gaps for gap filling.
+            temp_known_pixels (int): Number of known pixels in the temporary data array.
+            training_data (ndarray): Historical data matrices.
+        """
         self.ds_name = ds_name
         self.learning_function = learning_function
         self.hyperparameters = hyperparameters
@@ -87,10 +74,13 @@ class Gapfiller:
         self.temp_known_pixels = None
         self.training_data = []
 
-    def gapfill(self):
+    def gapfill(self) -> None:
         """
         Fill gaps in the data using machine learning models.
         The method fills each gap by building a model individually.
+
+        Returns:
+            None
         """
         # Retrieve and organize the data arrays
         self.get_arrays()
@@ -112,7 +102,7 @@ class Gapfiller:
             self.pool.close()
         print(f"The missing values of the gaps are now filled. You can find the results in /{self.directory}Results/")
 
-    def get_arrays(self):
+    def get_arrays(self) -> None:
         """
         Retrieve and organize data arrays needed for gap filling.
 
@@ -152,15 +142,12 @@ class Gapfiller:
                 self.training_data.append(array)
         self.training_data = np.array(self.training_data)
 
-    def print_insights(self):
+    def print_insights(self) -> None:
         """
         Print insights about the gap-filling process.
 
         This method formats and prints the details about the gaps that were filled, including the number of arrays with
         gaps, the size of the gaps, the directory where the filled arrays are saved, and the date of the actual matrix.
-
-        Args:
-            None
 
         Returns:
             None
@@ -171,15 +158,15 @@ class Gapfiller:
         print(f"The array(s) are saved in: /{self.directory}")
         print(f"Date: {actual_date} \n")
 
-    def process_gap_array(self, gap_size):
+    def process_gap_array(self, gap_size: float) -> np.ndarray:
         """
         Process the gap array and return indices of gap pixels.
 
         Args:
-            gap_size (float): percentage of the gap size
+            gap_size (float): Percentage of the gap size.
 
         Returns:
-            gap_indices (ndarray): indices of gap pixels
+            np.ndarray: Indices of gap pixels.
         """
         # Calculate the number of gap pixels
         gap_size_pixel = int(float(gap_size) * self.training_data[0].size)
@@ -203,7 +190,7 @@ class Gapfiller:
             gap_indices = np.argwhere(self.temp_gap_array == self.gap_value)
         return gap_indices
 
-    def fill_the_gaps(self, gap_indices):
+    def fill_the_gaps(self, gap_indices: np.ndarray) -> Tuple[np.ndarray, List[float], List[float]]:
         """
         Fill the gaps in the data array using a pixel model.
 
@@ -215,9 +202,9 @@ class Gapfiller:
             gap_indices (ndarray): List of indices (tuples) specifying the positions of the gaps in the array.
 
         Returns:
-                - filled_array (ndarray): The data array with gaps filled.
-                - actual_scores (list): List of actual scores for each filled pixel.
-                - validation_scores (list): List of validation scores for each filled pixel.
+            filled_array (ndarray): The data array with gaps filled.
+            actual_scores (list): List of actual scores for each filled pixel.
+            validation_scores (list): List of validation scores for each filled pixel.
         """
         # Lists to store actual and validation scores for each pixel and a copy of the data array to fill gaps
         actual_scores = []
@@ -241,22 +228,22 @@ class Gapfiller:
 
         return filled_array, actual_scores, validation_scores
 
-    def pixel_model(self, gap_index):
+    def pixel_model(self, gap_index: Tuple[int, int]) -> Tuple[Tuple[int, int], float, float, float]:
         """
         Fill a single gap in the data using machine learning models.
 
         This method fills a single gap specified by the `gap_index` by training a machine learning model.
         It handles different predictor strategies and gap interpolation.
 
-        Parameters:
-        - gap_index (tuple): The index (row, column) of the gap to be filled.
+        Args:
+            gap_index (Tuple[int, int]): The index (row, column) of the gap to be filled.
 
         Returns:
-        tuple: A tuple containing the following elements:
-            1. gap_index (tuple): The index (row, column) of the filled gap.
-            2. prediction (float): The predicted value for the filled gap.
-            3. actual_score (float or str): The absolute error between the actual value (if available) and the prediction.
-            4. validation_score (float or str): The cross-validation score (if available).
+            Tuple[Tuple[int, int], float, float, float]:
+                gap_index (Tuple[int, int]): The index (row, column) of the filled gap.
+                prediction (float): The predicted value for the filled gap.
+                actual_score (float): The absolute error between the actual value (if available) and the prediction.
+                validation_score (float): The cross-validation score (if available).
         """
         # Determine the predictor coordinates based on the selected strategy
         if self.predictor == "AllPoints":
@@ -324,18 +311,18 @@ class Gapfiller:
             actual_score = "not available"
         return gap_index, prediction, actual_score, validation_score
 
-    def create_dataframe(self, coords):
+    def create_dataframe(self, coords: List[List[int]]) -> pd.DataFrame:
         """
         Create a pandas DataFrame for machine learning model training.
 
         This method creates a DataFrame using the specified coordinates for training a machine learning model.
         It prepares the data for model training and prediction.
 
-        Parameters:
-        - coords (list of lists): List of coordinates [row, column] used as predictors.
+        Args:
+            coords (List[List[int]]): List of coordinates [row, column] used as predictors.
 
         Returns:
-        pd.DataFrame: A DataFrame containing historical data and target values for training.
+            pd.DataFrame: A DataFrame containing historical data and target values for training.
         """
         # Convert the input coordinates to a numpy array for easy indexing
         coords = np.array(coords)
@@ -353,7 +340,7 @@ class Gapfiller:
         dataframe = pd.DataFrame(dataframe)
         return dataframe
 
-    def get_random_points(self):
+    def get_random_points(self) -> Union[List[List[int]], str]:
         """
         Get random non-gap coordinates as predictors.
 
@@ -361,8 +348,8 @@ class Gapfiller:
         It is used when the 'RandomPoints' predictor strategy is chosen.
 
         Returns:
-        list or str: A list of random non-gap coordinates if there are enough known pixels;
-                     otherwise, a message indicating insufficient known pixels.
+            Union[List[List[int]], str]: A list of random non-gap coordinates if there are enough known pixels;
+                                         otherwise, a message indicating insufficient known pixels.
         """
         n_strings = self.temp_gap_array.shape[0]
         n_columns = self.temp_gap_array.shape[1]
@@ -400,19 +387,19 @@ class Gapfiller:
 
         return coords
 
-    def get_extra_matrix_points(self, gap_index):
+    def get_extra_matrix_points(self, gap_index: Tuple[int, int]) -> Union[List[List[int]], str]:
         """
         Get coordinates based on the extra matrix (e.g. Land Cover Classification (LCC)) of the target pixel.
 
         This method selects coordinates based on the LCC of the target pixel to improve predictor selection.
         It ensures that predictors come from the same LCC biome as the target pixel.
 
-        Parameters:
-        - gap_index (tuple): The index (row, column) of the gap to be filled.
+        Args:
+            gap_index (Tuple[int, int]): The index (row, column) of the gap to be filled.
 
         Returns:
-        list or str: A list of coordinates based on LCC if there are enough coordinates within the same biome;
-                     otherwise, a message indicating insufficient known pixels.
+            Union[List[List[int]], str]: A list of coordinates based on LCC if there are enough coordinates within the same biome;
+                                         otherwise, a message indicating insufficient known pixels.
         """
         extra_matrix = xr.open_zarr(self.directory + "extra_matrix_lcc.zarr")['lccs_class'].to_numpy()
 
@@ -455,18 +442,18 @@ class Gapfiller:
 
         return selected_coords
 
-    def preprocess_dataframe(self, dataframe):
+    def preprocess_dataframe(self, dataframe: pd.DataFrame) -> pd.DataFrame:
         """
         Preprocess the DataFrame by handling columns with gaps.
 
         This method preprocesses the DataFrame by removing columns with gaps in the target row.
         It ensures that the DataFrame is suitable for machine learning model training.
 
-        Parameters:
-        - dataframe (pd.DataFrame): The DataFrame containing historical data and target values.
+        Args:
+            dataframe (pd.DataFrame): The DataFrame containing historical data and target values.
 
         Returns:
-        pd.DataFrame: The preprocessed DataFrame with columns that do not contain gaps in the target row.
+            pd.DataFrame: The preprocessed DataFrame with columns that do not contain gaps in the target row.
         """
         # Extract the last row from the dataset (excluding the last element in it)
         last_row = np.array(dataframe.iloc[-1:, :-1])
@@ -490,21 +477,21 @@ class Gapfiller:
 
         return dataframe
 
-    def get_train_test_sets(self, dataframe):
+    def get_train_test_sets(self, dataframe: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Split the DataFrame into training and testing sets.
 
         This method splits the DataFrame into a training sample and an object to predict the value for.
         It excludes rows with gaps in the target row from the training sample.
 
-        Parameters:
-        - dataframe (pd.DataFrame): The preprocessed DataFrame containing historical data and target values.
+        Args:
+            dataframe (pd.DataFrame): The preprocessed DataFrame containing historical data and target values.
 
         Returns:
-        tuple: A tuple containing the following elements:
-            1. X_train (ndarray): The training data (predictors).
-            2. y_train (ndarray): The target values for training.
-            3. X_test (ndarray): The data for which predictions are to be made.
+            Tuple[np.ndarray, np.ndarray, np.ndarray]:
+                X_train (np.ndarray): The training data (predictors).
+                y_train (np.ndarray): The target values for training.
+                X_test (np.ndarray): The data for which predictions are to be made.
         """
         # Divide the dataframe into a training sample and an object to predict the value for
         train = dataframe.iloc[:-1, :]
@@ -519,22 +506,22 @@ class Gapfiller:
 
         return X_train, y_train, X_test
 
-    def process_results(self, gap_size, filled_array, actual_scores, validation_scores, start_time):
+    def process_results(self, gap_size: str, filled_array: np.ndarray, actual_scores: List[float], validation_scores: List[float], start_time: float) -> None:
         """
         Process and print results for a specific gap size.
 
         This method processes the results of the gap filling for a specific gap size.
         It calculates and prints mean absolute error (MAE) for actual and cross-validation scores.
 
-        Parameters:
-        - gap_size (str): The size of the gap being filled.
-        - filled_array (ndarray): The data array with gaps filled.
-        - actual_scores (list of float): List of actual score values.
-        - validation_scores (list of float): List of cross-validation score values.
-        - start_time (float): The start time of the gap filling process.
+        Args:
+            gap_size (str): The size of the gap being filled.
+            filled_array (np.ndarray): The data array with gaps filled.
+            actual_scores (List[float]): List of actual score values.
+            validation_scores (List[float]): List of cross-validation score values.
+            start_time (float): The start time of the gap filling process.
 
         Returns:
-        None
+            None
         """
         filled_xr_array = xr.DataArray(
             filled_array,
@@ -566,22 +553,22 @@ class Gapfiller:
         execution_time = end_time - start_time
         print(f"runtime: {execution_time:.2f} seconds \n")
 
-    def train_model(self, X_train, y_train, X_test):
+    def train_model(self, X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[float]]:
         """
         Perform machine learning model training and prediction.
 
         This method trains a machine learning model using the training data and predicts values for the test data.
         It handles different hyperparameter search methods and returns the predicted values and validation scores.
 
-        Parameters:
-        - X_train (ndarray): The training data (predictors).
-        - y_train (ndarray): The target values for training.
-        - X_test (ndarray): The data for which predictions are to be made.
+        Args:
+            X_train (np.ndarray): The training data (predictors).
+            y_train (np.ndarray): The target values for training.
+            X_test (np.ndarray): The data for which predictions are to be made.
 
         Returns:
-        tuple: A tuple containing the following elements:
-            1. predicted (float or ndarray): The predicted values for the test data.
-            2. validation_score (float or str): The cross-validation score (if available).
+            Tuple[Optional[np.ndarray], Optional[float]]:
+                predicted (Optional[np.ndarray]): The predicted values for the test data.
+                validation_score (Optional[float]): The cross-validation score (if available).
         """
         # Performing gap filling using Support Vector Regression (SVR) as the predictive model.
         if self.learning_function == "SVR":
@@ -640,17 +627,17 @@ class Gapfiller:
 
         return predicted, validation_score
 
-    def interpolation(self, gap_index):
+    def interpolation(self, gap_index: Tuple[int, int]) -> float:
         """
         Interpolate gaps using nearest-neighbor interpolation.
 
         This method performs gap interpolation using nearest-neighbor interpolation method.
 
-        Parameters:
-        - gap_index (tuple): The index (row, column) of the gap to be filled.
+        Args:
+            gap_index (Tuple[int, int]): The index (row, column) of the gap to be filled.
 
         Returns:
-        float: The interpolated value for the filled gap.
+            float: The interpolated value for the filled gap.
         """
         # Fill in gaps using the nearest neighbor interpolation
         all_pixels = self.temp_gap_array.size
