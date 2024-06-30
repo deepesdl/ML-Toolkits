@@ -63,8 +63,9 @@ def load_train_objs():
     # Initialize model and optimizer
     model     = torch.nn.Linear(in_features=1, out_features=1, bias=True)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+    loss      = torch.nn.MSELoss(reduction='mean')
 
-    return train_ds, test_ds, model, optimizer
+    return train_ds, test_ds, model, optimizer, loss
 
 def main(save_every: int, total_epochs: int, batch_size: int, snapshot_path: str = "snapshot.pt", best_model_path: str = 'Best_Model.pt'):
     """Main function to run distributed training process."""
@@ -73,14 +74,25 @@ def main(save_every: int, total_epochs: int, batch_size: int, snapshot_path: str
     ddp_init()
 
     # Load training objects
-    train_set, test_set, model, optimizer = load_train_objs()
+    train_set, test_set, model, optimizer, loss = load_train_objs()
 
     # Prepare data loaders
     train_loader = prepare_dataloader(train_set, batch_size, num_workers=5, parallel=True, callback_fn=map_function)
     test_loader  = prepare_dataloader(test_set, batch_size, num_workers=5, parallel=True, callback_fn=map_function)
 
     # Initialize the trainer and start training
-    trainer = Trainer(model, train_loader, test_loader, optimizer, save_every, best_model_path, snapshot_path)
+    trainer = Trainer(
+        model           = model,
+        train_data      = train_loader,
+        test_data       = test_loader,
+        optimizer       = optimizer,
+        save_every      = save_every,
+        best_model_path = best_model_path,
+        early_stopping  = True,
+        snapshot_path   = snapshot_path,
+        patience        = 3,
+        loss            = loss)
+
     dist_train(trainer, total_epochs)
 
 
