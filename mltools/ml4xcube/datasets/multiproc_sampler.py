@@ -130,8 +130,6 @@ class MultiProcSampler():
             rand_chunk (bool): Whether to select chunks randomly.
             drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
             data_fraq (float): The fraction of data to process.
-            total_chunks (int): Total number of chunks in the dataset.
-            num_chunks (int): Number of chunks to process.
             nproc (int): Number of processes to use for parallel processing.
             use_filter (bool): If true, apply the filter based on the specified filter_var.
             drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
@@ -148,22 +146,18 @@ class MultiProcSampler():
             block_size (Optional[List[Tuple[str, int]]]): Optional list specifying the block sizes for each dimension.
             sample_size (Optional[List[Tuple[str, int]]]): List of tuples specifying the dimensions and their respective step sizes.
             overlap (Optional[List[Tuple[str, int]]]): List of tuples specifying the dimensions and their respective overlap sizes.
+            total_chunks (int): Total number of chunks in the dataset.
+            num_chunks (int): Number of chunks to process.
         """
         self.ds = ds
         self.rand_chunk = rand_chunk
         self.drop_nan_masked = drop_nan_masked
-        self.data_fraq = data_fraq
-        self.total_chunks = int(calculate_total_chunks(self.ds, self.block_size))
-        self.num_chunks = int(self.total_chunks * self.data_fraq)
-        self.nproc = min(nproc, self.num_chunks)
         self.use_filter = use_filter
         self.drop_sample = drop_sample
         self.fill_method = fill_method
         self.const = const
         self.filter_var = filter_var
         self.chunk_size = chunk_size
-        if chunk_size is None:
-            self.chunk_size = tuple(dim[1] for dim in self.sample_size) if self.sample_size else (1,)
         self.train_store = zarr.open(train_cube)
         self.test_store = zarr.open(test_cube)
         self.array_dims = array_dims
@@ -171,8 +165,14 @@ class MultiProcSampler():
         self.chunk_batch = chunk_batch if chunk_batch is not None else self.nproc
         self.callback_fn = callback_fn
         self.block_size = block_size
+        self.total_chunks = int(calculate_total_chunks(self.ds, self.block_size))
         self.sample_size = sample_size
         self.overlap = overlap
+        self.data_fraq = data_fraq
+        self.num_chunks = int(self.total_chunks * self.data_fraq)
+        self.nproc = min(nproc, self.num_chunks)
+        if chunk_size is None:
+            self.chunk_size = tuple(dim[1] for dim in self.sample_size) if self.sample_size else (1,)
         self.total_chunks = calculate_total_chunks(ds)
         self.create_cubes()
 
@@ -199,11 +199,13 @@ class MultiProcSampler():
                 print(f"Train data samples: {train_data[var].shape[0]}")
                 print(f"Test data samples: {test_data[var].shape[0]}")
 
+                append_dim = None
+                if self.sample_size is not None: append_dim = 0
                 if train_data[var].shape[0] > 0:
                     train_var_data = train_data[var]
                     if var not in self.train_store:
                         self.train_store.create_dataset(var, data=train_var_data, shape=train_var_data.shape,
-                                                        dtype=train_var_data.dtype, chunks=self.chunk_size, append_dim=0)
+                                                        dtype=train_var_data.dtype, chunks=self.chunk_size, append_dim=append_dim)
                     else:
                         self.train_store[var].append(train_var_data)
 
@@ -211,7 +213,7 @@ class MultiProcSampler():
                     test_var_data = test_data[var]
                     if var not in self.test_store:
                         self.test_store.create_dataset(var, data=test_var_data, shape=test_var_data.shape,
-                                                       dtype=test_var_data.dtype, chunks=self.chunk_size, append_dim=0)
+                                                       dtype=test_var_data.dtype, chunks=self.chunk_size, append_dim=append_dim)
                     else:
                         self.test_store[var].append(test_var_data)
 
