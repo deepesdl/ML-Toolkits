@@ -1,36 +1,41 @@
 import os
 import joblib
 import numpy as np
-from typing import Union, Tuple
+from sklearn.base import BaseEstimator
 from sklearn.metrics import mean_squared_error
+from typing import Union, Tuple, Optional, Callable, List, Any
 
 
 class Trainer:
     """
     A trainer class for training scikit-learn models using either a PyTorch DataLoader or numpy arrays.
     This allows for flexible data input for large datasets or in-memory data.
-
-    Attributes:
-        model: A scikit-learn estimator that supports partial_fit.
-        train_data (Union[DataLoader, Tuple[np.ndarray, np.ndarray]]): PyTorch DataLoader for batch training or a tuple of numpy arrays (X_train, y_train).
-        test_data (Union[DataLoader, Tuple[np.ndarray, np.ndarray]]): PyTorch DataLoader for batch validation/testing or a tuple of numpy arrays (X_test, y_test).
-        metrics (list, optional): A list of functions that compute a metric between predictions and true values.
-        model_path (str, optional): Path to save the best model.
-        batch_training (bool): Whether to use batch training; if False, the model will be trained on complete data at once.
-        mlflow_run: An MLflow run instance to log training and validation metrics.
     """
 
     def __init__(
             self,
-            model,
-            train_data,
-            test_data = None,
-            metrics: list = [mean_squared_error],
-            model_path: str = None,
+            model: BaseEstimator,
+            train_data: Union[Any, Tuple[np.ndarray, np.ndarray]],
+            test_data: Optional[Union[Any, Tuple[np.ndarray, np.ndarray]]] = None,
+            metrics: List[Callable] = [mean_squared_error],
+            model_path: Optional[str] = None,
             batch_training: bool = False,
-            mlflow_run = None,
-            task_type = 'supervised'
-    ) -> None:
+            mlflow_run=None,
+            task_type: str = 'supervised'
+        ):
+        """
+        Initialize a Trainer object.
+
+        Attributes:
+            model (BaseEstimator): A scikit-learn estimator that supports partial_fit.
+            train_data (Union[DataLoader, Tuple[np.ndarray, np.ndarray]]): PyTorch DataLoader for batch training or a tuple of numpy arrays (X_train, y_train).
+            test_data (Optional[Union[DataLoader, Tuple[np.ndarray, np.ndarray]]]): PyTorch DataLoader for batch validation/testing or a tuple of numpy arrays (X_test, y_test).
+            metrics (List[Callable]): A list of functions that compute a metric between predictions and true values.
+            model_path (Optional[str]): Path to save the best model.
+            batch_training (bool): Whether to use batch training; if False, the model will be trained on complete data at once.
+            mlflow_run: An MLflow run instance to log training and validation metrics.
+            task_type (str): The type of task, either 'supervised' or 'unsupervised'.
+        """
         self.model = model
         self.train_data = train_data
         self.test_data = test_data
@@ -41,8 +46,16 @@ class Trainer:
         self.task_type = task_type
         self.model_name = os.path.basename(os.path.normpath(self.model_path))
 
-    def run_batch_training(self, mode='Training'):
-        """Validates the model on the test dataset if provided."""
+    def run_batch_training(self, mode: str = 'Training') -> Optional[float]:
+        """
+        Perform batch training or validation.
+
+        Args:
+            mode (str): Mode of operation, either 'Training' or 'Validation'.
+
+        Returns:
+            Optional[float]: The average score computed using the specified metrics.
+        """
         if self.test_data and self.metrics:
             total_score = 0
             count = 0
@@ -78,7 +91,13 @@ class Trainer:
             return avg_score
         return None
 
-    def train(self):
+    def train(self) -> BaseEstimator:
+        """
+        Train the model using the specified data.
+
+        Returns:
+            BaseEstimator: The trained scikit-learn model.
+        """
         if not self.batch_training:
             if self.task_type == 'supervised':
                 X_train, y_train = self.train_data

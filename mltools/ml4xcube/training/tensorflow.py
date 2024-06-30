@@ -1,5 +1,6 @@
 import os
 import tensorflow as tf
+from typing import Optional
 from ml4xcube.training.train_plots import plot_loss
 
 class Trainer:
@@ -18,10 +19,27 @@ class Trainer:
             tf_log_dir: str = './logs',
             mlflow_run = None,
             epochs: int = 100,
-            train_epoch_steps: int  = None,
-            val_epoch_steps: int = None,
+            train_epoch_steps: Optional[int] = None,
+            val_epoch_steps: Optional[int] = None,
             create_loss_plot: bool = False,
-    ) -> None:
+    ):
+        """
+        Initialize a Trainer object.
+
+        Attributes:
+            model (tf.keras.Model): The TensorFlow model to be trained.
+            train_data (tf.data.Dataset): The dataset for training.
+            test_data (tf.data.Dataset): The dataset for validation.
+            best_model_path (str): Path to save the best model.
+            early_stopping (bool): Whether to use early stopping. Defaults to True.
+            patience (int): Number of epochs with no improvement after which training will be stopped. Defaults to 10.
+            tf_log_dir (str): Directory to save TensorBoard logs. Defaults to './logs'.
+            mlflow_run: MLflow run object for logging artifacts. Defaults to None.
+            epochs (int): Number of epochs to train the model. Defaults to 100.
+            train_epoch_steps (int, optional): Number of steps per training epoch. Defaults to None.
+            val_epoch_steps (int, optional): Number of steps per validation epoch. Defaults to None.
+            create_loss_plot (bool): Whether to create a plot of training and validation loss. Defaults to False.
+        """
         self.model = model
         self.train_data = train_data
         self.test_data = test_data
@@ -36,10 +54,14 @@ class Trainer:
         self.model_name = os.path.basename(os.path.normpath(self.best_model_path))
         self.create_loss_plot = create_loss_plot
 
-    def train(self):
-
+    def train(self) -> tf.keras.Model:
         """
+        Train the TensorFlow model.
+
         The main training loop with specific steps per epoch for training and validation.
+
+        Returns:
+            tf.keras.Model: The trained TensorFlow model.
         """
         if self.steps_per_train_epoch is None:
             for batch in self.train_data.take(1):

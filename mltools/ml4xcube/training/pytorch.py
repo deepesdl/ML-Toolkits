@@ -23,7 +23,25 @@ class Trainer:
             mlflow_run=None,
             device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
             create_loss_plot: bool = False,
-    ) -> None:
+    ):
+        """
+        Initialize the Trainer.
+
+        Attributes:
+            model (torch.nn.Module): The PyTorch model to train.
+            train_data (DataLoader): DataLoader for the training data.
+            test_data (DataLoader): DataLoader for the validation/test data.
+            optimizer (torch.optim.Optimizer): Optimizer for training.
+            best_model_path (str): Path to save the best model.
+            early_stopping (bool): Enable or disable early stopping. Defaults to True.
+            patience (int): Number of epochs to wait for improvement before stopping early. Defaults to 10.
+            loss (torch.nn.Module): Loss function. Defaults to MSELoss.
+            metrics (list): List of metrics to evaluate. Defaults to None.
+            epochs (int): Number of training epochs. Defaults to 10.
+            mlflow_run: An MLflow run instance to log training and validation metrics. Defaults to None.
+            device (torch.device): Device to run the training on. Defaults to CUDA if available.
+            create_loss_plot (bool): Whether to create a plot of training and validation loss. Defaults to False.
+        """
         self.model = model.to(device)
         self.train_data = train_data
         self.test_data = test_data
@@ -43,9 +61,16 @@ class Trainer:
         self.train_list = list()
         self.create_loss_plot = create_loss_plot
 
-    def _run_batch(self, inputs, targets):
+    def _run_batch(self, inputs: torch.Tensor, targets: torch.Tensor) -> float:
         """
         Runs a single batch of training data through the model.
+
+        Args:
+            inputs (torch.Tensor): Input data for the model.
+            targets (torch.Tensor): Target data for the training.
+
+        Returns:
+            float: The loss value for the batch.
         """
         inputs, targets = inputs.to(self.device), targets.to(self.device)
         self.optimizer.zero_grad()
@@ -55,9 +80,12 @@ class Trainer:
             loss.backward()
         return loss.item()
 
-    def _run_epoch(self, epoch: int):
+    def _run_epoch(self, epoch: int) -> None:
         """
         Runs a single epoch of training.
+
+        Args:
+            epoch (int): The current epoch number.
         """
         self.model.train()
         total_loss = 0.0
@@ -77,9 +105,15 @@ class Trainer:
         if self.mlflow_run:  # Check if an MLflow run instance is available
             self.mlflow_run.log_metric("training_loss", (total_loss / total_count), step=epoch)
 
-    def _validate(self, epoch) -> float:
+    def _validate(self, epoch: int) -> float:
         """
         Validates the model on the test dataset.
+
+        Args:
+            epoch (int): The current epoch number.
+
+        Returns:
+            float: The average validation loss.
         """
         self.model.eval()
         total_loss = 0.0
@@ -101,9 +135,12 @@ class Trainer:
         self.val_list.append(avg_val_loss)
         return avg_val_loss
 
-    def train(self):
+    def train(self) -> torch.nn.Module:
         """
         The main training loop.
+
+        Returns:
+            torch.nn.Module: The trained model.
         """
         for epoch in range(self.max_epochs):
             self._run_epoch(epoch)
