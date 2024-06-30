@@ -1,29 +1,12 @@
+import zarr
 import torch
+import argparse
 import numpy as np
 import xarray as xr
 import dask.array as da
-from global_land_mask import globe
-from xcube.core.store import new_data_store
-from ml4xcube.cube_utilities import get_chunk_sizes
-from ml4xcube.preprocessing import get_statistics, standardize
-from ml4xcube.datasets.multiproc_sampler import MultiProcSampler
+from ml4xcube.cube_utilities import assign_dims
 from ml4xcube.datasets.pytorch import LargeScaleXrDataset, prepare_dataloader
 from ml4xcube.training.pytorch_distributed import ddp_init, dist_train, Trainer
-
-
-at_stat, lst_stat = None, None
-
-
-def standardize_data(chunk: xr.Dataset):
-    """
-    Standardize xarray chunks.
-    """
-    global at_stat, lst_stat
-
-    chunk['air_temperature_2m'] = standardize(chunk['air_temperature_2m'], *at_stat)
-    chunk['air_temperature_2m'] = standardize(chunk['land_surface_temperature'], *lst_stat)
-
-    return chunk
 
 
 def map_function(batch):
@@ -59,34 +42,19 @@ def map_function(batch):
 
 
 def load_train_objs():
-    data_store = new_data_store("s3", root="esdl-esdc-v2.1.1", storage_options=dict(anon=True))
-    dataset    = data_store.open_data('esdc-8d-0.083deg-184x270x270-2.1.1.zarr')
-    start_time = "2002-05-21"
-    end_time   = "2002-08-01"
-    ds         = dataset[["land_surface_temperature", "air_temperature_2m"]].sel(time=slice(start_time, end_time))
+    train_store = zarr.open('train_cube.zarr')
+    test_store = zarr.open('test_cube.zarr')
 
-    global at_stat, lst_stat
-    at_stat  = get_statistics(ds, 'air_temperature_2m')
-    lst_stat = get_statistics(ds, 'land_surface_temperature')
+    # Convert Zarr stores to Dask arrays and then to xarray Datasets
+    train_data = {var: da.from_zarr(train_store[var]) for var in train_store.array_keys()}
+    test_data = {var: da.from_zarr(test_store[var]) for var in test_store.array_keys()}
 
-    # Create a land mask
-    lon_grid, lat_grid = np.meshgrid(ds.lon, ds.lat)
-    lm0                = da.from_array(globe.is_land(lat_grid, lon_grid))
-    lm                 = da.stack([lm0 for _ in range(ds.dims['time'])], axis=0)
+    # Assign dimensions using the assign_dims function
+    train_data = assign_dims(train_data, ('samples', ))
+    test_data = assign_dims(test_data, ('samples', ))
 
-    # Assign land mask to the dataset
-    ds = ds.assign(land_mask=(['time', 'lat', 'lon'], lm.rechunk(chunks=([v for _, v in get_chunk_sizes(ds)]))))
-
-    # Preprocess data and split into training and testing sets
-    train_set, test_set = MultiProcSampler(
-        ds          = ds,
-        train_cube  = 'train_cube.zarr',
-        test_cube   = 'test_cube.zarr',
-        nproc       = 5,
-        chunk_batch = 10,
-        data_fraq   = 0.01,
-        callback_fn = standardize_data
-    ).get_datasets()
+    train_set = xr.Dataset(train_data)
+    test_set = xr.Dataset(test_data)
 
     # Create PyTorch data sets
     train_ds = LargeScaleXrDataset(train_set)
@@ -117,8 +85,6 @@ def main(save_every: int, total_epochs: int, batch_size: int, snapshot_path: str
 
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser(description='simple distributed training job')
     parser.add_argument('total_epochs', type=int, help='Total epochs to train the model')
     parser.add_argument('--save_every', default=10, type=int, help='How often to save a snapshot')
