@@ -21,7 +21,7 @@ def get_chunk_sizes(ds: xr.Dataset) -> List[Tuple[str, int]]:
         if var.chunks:
             chunks = tuple(max(*c) if len(c) > 1 else c[0]
                            for c in var.chunks)
-            for dim_name, chunk_size in zip(var.dims, chunks):
+            for dim_name, chunk_size in zip(var.sizes, chunks):
                 chunk_sizes[dim_name] = max(chunk_size,
                                             chunk_sizes.get(dim_name, 0))
     return [(str(k), v) for k, v in chunk_sizes.items()]
@@ -43,7 +43,7 @@ def iter_data_var_blocks(ds: xr.Dataset, block_size: Optional[List[Tuple[str, in
     block_size = get_chunk_sizes(ds) if block_size is None else block_size
     dim_ranges = []
     for dim_name, chunk_size in block_size:
-        dim_size = ds.dims[dim_name]
+        dim_size = ds.sizes[dim_name]
         dim_ranges.append(range(0, dim_size, chunk_size))
     for offsets in itertools.product(*dim_ranges):
         dim_slices = {block_size[0]: slice(offset, offset + block_size[1])
@@ -52,7 +52,7 @@ def iter_data_var_blocks(ds: xr.Dataset, block_size: Optional[List[Tuple[str, in
         for var_name, var in ds.data_vars.items():
             indexers = {dim_name: dim_slice
                         for dim_name, dim_slice in dim_slices.items()
-                        if dim_name in var.dims}
+                        if dim_name in var.sizes}
             var_blocks[var_name] = var.isel(indexers).values
         yield var_blocks
 
@@ -80,7 +80,7 @@ def calculate_total_chunks(ds: xr.Dataset, block_size: Optional[List[Tuple[str, 
     block_size = default_block_sizes
 
     total_chunks = np.prod([
-        len(range(0, ds.dims[dim_name], size))
+        len(range(0, ds.sizes[dim_name], size))
         for dim_name, size in block_size
     ])
 
@@ -114,7 +114,7 @@ def get_chunk_by_index(ds: xr.Dataset, index: int, block_size: Optional[List[Tup
     block_size = default_block_sizes
 
     # Calculate the total number of chunks along each dimension
-    dim_chunks = [range(0, ds.dims[dim_name], size) for dim_name, size in block_size]
+    dim_chunks = [range(0, ds.sizes[dim_name], size) for dim_name, size in block_size]
     total_chunks_per_dim = [len(list(chunks)) for chunks in dim_chunks]
 
     # Convert the linear index to a multi-dimensional index
@@ -124,14 +124,14 @@ def get_chunk_by_index(ds: xr.Dataset, index: int, block_size: Optional[List[Tup
     dim_slices = {}
     for dim_idx, (dim_name, block_size) in enumerate(block_size):
         start = multi_dim_index[dim_idx] * block_size
-        end = min(start + block_size, ds.dims[dim_name])
+        end = min(start + block_size, ds.sizes[dim_name])
         dim_slices[dim_name] = slice(start, end)
 
     # Extract the chunk for each variable
     var_blocks = {}
     for var_name, var in ds.data_vars.items():
         # Determine the slices applicable to this variable
-        indexers = {dim_name: dim_slice for dim_name, dim_slice in dim_slices.items() if dim_name in var.dims}
+        indexers = {dim_name: dim_slice for dim_name, dim_slice in dim_slices.items() if dim_name in var.sizes}
         # Extract the chunk using variable-specific indexers
         var_blocks[var_name] = var.isel(indexers).values
 

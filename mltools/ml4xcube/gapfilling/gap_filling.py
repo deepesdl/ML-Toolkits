@@ -525,7 +525,7 @@ class Gapfiller:
         """
         filled_xr_array = xr.DataArray(
             filled_array,
-            dims=self.actual_matrix.dims,
+            dims=self.actual_matrix.sizes,
             coords=self.actual_matrix.coords,
             attrs=self.actual_matrix.attrs
         )

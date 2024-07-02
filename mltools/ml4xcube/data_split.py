@@ -24,11 +24,11 @@ def assign_rand_split(ds: xr.Dataset, split: float = 0.8) -> xr.Dataset:
     random.seed(seed)
 
     # Ensure the random array matches the dimensions and chunk sizes of the input dataset
-    dimensions = list(ds.dims)  # Gets the dimensions from the dataset
-    chunk_sizes = {dim: ds.chunks[dim] for dim in ds.dims}  # Assumes the dataset is chunked
+    dimensions = list(ds.sizes)  # Gets the dimensions from the dataset
+    chunk_sizes = {dim: ds.chunks[dim] for dim in ds.sizes}  # Assumes the dataset is chunked
 
     # Generate a random array with the same shape and chunking as the dataset
-    random_split = da.random.random(size=tuple(ds.dims[dim] for dim in dimensions), chunks=tuple(chunk_sizes[dim] for dim in dimensions)) < split
+    random_split = da.random.random(size=tuple(ds.sizes[dim] for dim in dimensions), chunks=tuple(chunk_sizes[dim] for dim in dimensions)) < split
 
     # Assign the new data array to the dataset under the variable name 'split'
     return ds.assign(split=(dimensions, random_split))
@@ -89,7 +89,7 @@ def assign_block_split(ds: xr.Dataset, block_size: Optional[List[Tuple[str, int]
 
     def block_rand(x):
         block_ind_array = da.zeros(
-            (list(x.dims.values())), chunks=([v for k, v in block_size])
+            (list(x.sizes.values())), chunks=([v for k, v in block_size])
         )
         mapped = block_ind_array.map_blocks(role_dice)
         return ("time", "lat", "lon"), mapped
