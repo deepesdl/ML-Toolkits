@@ -30,6 +30,9 @@ def assign_rand_split(ds: xr.Dataset, split: float = 0.8) -> xr.Dataset:
     # Generate a random array with the same shape and chunking as the dataset
     random_split = da.random.random(size=tuple(ds.sizes[dim] for dim in dimensions), chunks=tuple(chunk_sizes[dim] for dim in dimensions)) < split
 
+    # Convert boolean values to floats
+    random_split = random_split.astype(float)
+
     # Assign the new data array to the dataset under the variable name 'split'
     return ds.assign(split=(dimensions, random_split))
       
