@@ -39,7 +39,7 @@ class Trainer:
             patience: int = 10,
             loss = None,
             metrics: list = None,
-            print_loss_per_gpu: bool = False,  # New parameter to control loss printing
+            validate_parallelism: bool = False,  # New parameter to control loss printing
             create_loss_plot: bool = False
     ):
         """
@@ -57,7 +57,7 @@ class Trainer:
             patience (int): Number of epochs to wait for improvement before stopping early. Defaults to 10.
             loss (Optional[Callable]): Loss function. Defaults to None.
             metrics (Optional[List[Callable]]): List of metrics to evaluate. Defaults to None.
-            print_loss_per_gpu (bool): Whether to print loss for each GPU. Defaults to False.
+            validate_parallelism (bool): Whether to print loss for each GPU. Defaults to False.
             create_loss_plot (bool): Whether to create a plot of training and validation loss. Defaults to False.
         """
         self.gpu_id = int(os.environ["LOCAL_RANK"])  # GPU ID for the current process
@@ -76,7 +76,7 @@ class Trainer:
         self.loss = loss # Loss function
         self.metrics = metrics # List of metrics to compute for validation purposes
         self.model = DDP(self.model, device_ids=[self.gpu_id], find_unused_parameters=True)  # Wraps the model for DDP
-        self.print_loss_per_gpu = print_loss_per_gpu
+        self.validate_parallelism = validate_parallelism
         self.create_loss_plot = create_loss_plot
         self.train_list = list()
         self.val_list = list()
@@ -92,7 +92,7 @@ class Trainer:
         snapshot = torch.load(snapshot_path, map_location=loc)
         self.model.load_state_dict(snapshot["MODEL_STATE"])
         self.epochs_run = snapshot["EPOCHS_RUN"]
-        print(f"Resuming training from snapshot at Epoch {self.epochs_run}")
+        print(f"Resuming training from snapshot at Epoch {self.epochs_run + 1}")
 
     def _run_batch(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         """
@@ -116,10 +116,9 @@ class Trainer:
         end_time = time()  # End timing the batch processing
         batch_processing_time = end_time - start_time  # Calculate processing time
 
-        if self.print_loss_per_gpu:  # Check if loss printing is enabled
+        if self.validate_parallelism:  # Check if loss printing is enabled
             # Print loss for the current GPU along with the processing time of the batch
-            print(
-                f"GPU {self.gpu_id} | Batch Loss: {loss.item():.4f} | Processing Time: {batch_processing_time:.2f} seconds")
+            print(f"GPU {self.gpu_id} | Batch Loss: {loss.item():.4f}")
         return loss
 
     def _run_epoch(self, epoch: int) -> None:
@@ -142,7 +141,7 @@ class Trainer:
         avg_epoch_loss = running_loss / running_size
         self.train_list.append(avg_epoch_loss)
         if self.gpu_id == 0:
-            print(f"Epoch {epoch} | Average Loss: {avg_epoch_loss:.4f}")
+            print(f"Epoch {epoch + 1} | Average Loss: {avg_epoch_loss:.4f}")
 
     def _validate(self) -> float:
         """
@@ -194,7 +193,7 @@ class Trainer:
             "EPOCHS_RUN": epoch,
         }
         torch.save(snapshot, self.snapshot_path)
-        print(f"Epoch {epoch} | Training snapshot saved at {self.snapshot_path}")
+        print(f"Epoch {epoch + 1} | Training snapshot saved at {self.snapshot_path}")
 
     def train(self, max_epochs: int) -> None:
         """

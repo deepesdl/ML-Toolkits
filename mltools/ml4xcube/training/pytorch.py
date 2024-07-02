@@ -101,7 +101,7 @@ class Trainer:
         train_avg_loss = total_loss / total_count
         self.train_list.append(train_avg_loss)
 
-        print(f"Epoch {epoch}: Average Loss: {train_avg_loss:.4e}")
+        print(f"Epoch {epoch + 1}: Average Loss: {train_avg_loss:.4e}")
         if self.mlflow_run:  # Check if an MLflow run instance is available
             self.mlflow_run.log_metric("training_loss", (total_loss / total_count), step=epoch)
 
@@ -128,7 +128,7 @@ class Trainer:
                 total_count += len(inputs)
 
         avg_val_loss = total_loss / total_count
-        print(f"Epoch {epoch}: Validation Loss: {avg_val_loss:.4e}")
+        print(f"Epoch {epoch + 1}: Validation Loss: {avg_val_loss:.4e}")
         if self.mlflow_run:
             self.mlflow_run.log_metric("validation_loss", avg_val_loss, step=epoch)
 
