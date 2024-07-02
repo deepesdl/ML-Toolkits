@@ -231,15 +231,14 @@ def split_chunk(chunk: Dict[str, np.ndarray], sample_size: List[Tuple[str, int]]
 
 def assign_dims(data: Dict[str, da.Array|xr.DataArray], dims: Tuple) -> Dict[str, xr.DataArray]:
     """
-    Split a chunk into points based on provided indices.
+    Assign dimensions to each variable in the dataset based on provided dimension names.
 
     Args:
-        chunk (Dict[str, np.ndarray]): The chunk to split.
-        sample_size (List[Tuple[str, int]]): Specific indices for extracting data points.
-        overlap (Optional[List[Tuple[str, int]]]): Overlap for overlapping samples due to chunk splitting.
+        data (Dict[str, da.Array | xr.DataArray]): A dictionary where keys are variable names and values are dask arrays or xarray DataArrays.
+        dims (Tuple): A tuple of dimension names to assign to the DataArrays.
 
     Returns:
-        Dict[str, np.ndarray]: A dictionary where keys are variable names and values are the extracted points as numpy arrays.
+        Dict[str, xr.DataArray]: A dictionary where keys are variable names and values are xarray DataArrays with assigned dimensions.
     """
     result = {}
     for var, dask_array in data.items():

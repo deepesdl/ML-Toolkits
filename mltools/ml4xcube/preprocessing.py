@@ -47,12 +47,13 @@ def apply_filter(ds, filter_var, drop_sample=False) -> Dict[str, np.ndarray]:
 def drop_nan_values(ds: Dict[str, np.ndarray], vars: list, filter_var: str = None) -> Dict[str, np.ndarray]:
     """
     Drop NaN values from the dataset. If any value in a subarray is NaN, drop the entire subarray.
-    For lists of points, drop single NaN values.
+    For lists of points, drop single NaN values. If filter_var is defined, it will use this mask
+    to determine validity of subarrays.
 
     Args:
         ds (Dict[str, np.ndarray]): The dataset to filter. It should be a dictionary where keys are variable names and values are numpy arrays.
         vars (list): The variables to check for NaN values.
-        filter_var (Optional[str]): The name of the mask variable in the dataset. If None, drop the entire subarray.
+        filter_var (Optional[str]): The name of the mask variable in the dataset. If None, drop the entire subarray based on NaN values alone.
 
     Returns:
         Dict[str, np.ndarray]: The filtered dataset.
@@ -67,26 +68,34 @@ def drop_nan_values(ds: Dict[str, np.ndarray], vars: list, filter_var: str = Non
         if var in ds:
             value = ds[var]
             if value.ndim == 1:  # List of points
+                # Create a mask where NaN values are marked as invalid
                 valid_mask = ~np.isnan(value)
                 valid_mask_lists.append(valid_mask)
-            elif value.ndim in (2, 3, 4):  # multi dim tensor including batch size
+            elif value.ndim in (2, 3, 4):  # Multi-dimensional arrays
                 axes_to_check = tuple(range(1, value.ndim))
                 if len(axes_to_check) == 1: axes_to_check = 1
                 if mask_values is not None:
+                    # Create a mask based on filter_var
                     valid_mask = np.any(ds[filter_var], axis=axes_to_check)
                     valid_mask_lists.append(valid_mask)
+                    # Create a NaN mask
                     nan_mask = np.where(np.isnan(ds[var]), False, True)
                     valid_mask = np.any(nan_mask, axis=axes_to_check)
                     valid_mask_lists.append(valid_mask)
+                    # Combine the NaN mask and the logical NOT of mask_values
                     lm = ~ds[filter_var]
                     nan_val = nan_mask | lm
+                    # Final validation mask combining NaN mask and filter_var
                     validation_mask = np.where(nan_val, True, False)
                     valid_mask = np.all(validation_mask, axis=axes_to_check)
 
                     valid_mask_lists.append(valid_mask)
                 else:
+                    # If no filter_var, just check for NaNs
                     valid_mask_lists.append(~np.isnan(value).any(axis=axes_to_check))
+    # Combine all masks using logical AND
     valid_mask = np.all(valid_mask_lists, axis=0)
+    # Filter the dataset
     ds = {x: ds[x][valid_mask] for x in ds.keys()}
 
     return ds
