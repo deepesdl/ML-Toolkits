@@ -1,61 +1,110 @@
-import geopandas as gpd
+import xarray as xr
 import matplotlib.pyplot as plt
+from typing import Optional, List, Tuple
+from ml4xcube.preprocessing import apply_filter
+from scipy.ndimage import binary_erosion, binary_dilation
 
 
 def plot_slice(
-        df, var_to_plot, xdim, ydim, title='Geographic Plot', label='Geographic Plot [K]', color_map='viridis',
-        xlabel='Longitude', ylabel='Latitude', save_fig=False, file_name='plot.png', fig_size=(15, 10),
-        edge_color='black', base_map='naturalearth_lowres', marker='o', vmin=None, vmax=None, ticks=None) -> None:
+    ds: xr.DataArray,
+    var_to_plot: str,
+    xdim: str,
+    ydim: str,
+    filter_var: str ='land_mask',
+    title: str ='Cube Slice Plot',
+    label: str ='Cube Slice',
+    color_map: str ='viridis',
+    xlabel: str ='Longitude',
+    ylabel: str ='Latitude',
+    save_fig: bool = False,
+    file_name: str ='plot.png',
+    fig_size: Tuple[int, int] =(15, 10),
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    ticks: Optional[List[float]] = None
+) -> None:
     """
-    Plots data cube slice from a DataFrame with an optional base map for context.
+    Plots a slice of data from a DataArray with an optional land mask for context.
 
     Args:
-        df (DataFrame): DataFrame containing the latitude and longitude and data to plot.
-        var_to_plot (str): Name of the column which contains the data to visualize.
+        ds (xarray.DataArray): DataArray containing the latitude, longitude, and data to plot.
+        var_to_plot (str): Name of the variable to visualize.
         xdim (str): Name of the x dimension to plot.
         ydim (str): Name of the y dimension to plot.
-        title (str): Title of the plot.
-        label (str): Legend label for the plot.
-        color_map (str): Color map to use for the plot.
-        save_fig (bool): If True, saves the figure to a file.
-        file_name (str): Name of the file to save the plot to, if save_fig is True.
-        fig_size (tuple): Size of the figure to create.
-        edge_color (str): Color of the edges of the base map.
-        marker (str): Marker style.
-        vmin (Optional[float]): Minimum data value that corresponds to the lower limit of the colormap.
-        vmax (Optional[float]): Maximum data value that corresponds to the upper limit of the colormap.
-        ticks (Optional[List]): List of two elements defining the min and max values for color bar ticks.
+        filter_var (str): Name of the variable used as a land mask for filtering. Defaults to 'land_mask'.
+        title (str): Title of the plot. Defaults to 'Cube Slice Plot'.
+        label (str): Legend label for the plot. Defaults to 'Cube Slice'.
+        color_map (str): Color map to use for the plot. Defaults to 'viridis'.
+        xlabel (str): Label for the x-axis. Defaults to 'Longitude'.
+        ylabel (str): Label for the y-axis. Defaults to 'Latitude'.
+        save_fig (bool): If True, saves the figure to a file. Defaults to False.
+        file_name (str): Name of the file to save the plot to, if save_fig is True. Defaults to 'plot.png'.
+        fig_size (tuple): Size of the figure to create. Defaults to (15, 10).
+        vmin (Optional[float]): Minimum data value that corresponds to the lower limit of the colormap. Defaults to None.
+        vmax (Optional[float]): Maximum data value that corresponds to the upper limit of the colormap. Defaults to None.
+        ticks (Optional[List[float]]): List of two elements defining the min and max values for color bar ticks. Defaults to None.
 
     Returns:
         None
     """
-    plt.ioff()
+    plt.ioff() # Turn off interactive plotting
 
-    # Create a GeoDataFrame from the DataFrame
-    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[xdim], df[ydim]))
+    # Extract the min and max values for the x and y dimension
+    x_min, x_max = ds[xdim].min().item(), ds[xdim].max().item()
+    y_min, y_max = ds[ydim].min().item(), ds[ydim].max().item()
+    extent = [x_min, x_max, y_min, y_max]
 
-    # Load the world map
-    world = gpd.read_file(gpd.datasets.get_path(base_map))
+    # Convert the variable to plot to a numpy array and reshape
+    ds_dict = {}
+    ds_dict[var_to_plot] = ds[var_to_plot].to_numpy()
+    original_shape = ds_dict[var_to_plot].shape
+    ds_dict[var_to_plot] = ds_dict[var_to_plot].reshape((1, *original_shape))
 
-    # Plotting
+    # Create the plot
     fig, ax = plt.subplots(figsize=fig_size)
-    world.plot(ax=ax, color='white', edgecolor=edge_color)
 
-    plot = gdf.plot(ax=ax, column=var_to_plot, cmap=color_map, legend=False, marker=marker,
-                    markersize=0.1, vmin=vmin, vmax=vmax, rasterized=True)
+    # Apply the land mask if specified
+    if filter_var is not None and filter_var in ds:
+        # Convert the land mask to a numpy array and reshape
+        ds_dict[filter_var] = ds[filter_var].to_numpy()
+        ds_dict[filter_var] = ds_dict[filter_var].reshape((1, *original_shape))
 
+        # Apply the land mask filter
+        ds_dict = apply_filter(ds_dict, filter_var, drop_sample=False)
+
+        # Extract the land mask
+        mask = ds_dict[filter_var][0]
+
+        # Erode the mask to move the border inward
+        eroded_mask = binary_erosion(mask, iterations=1)
+
+        # Calculate the border by subtracting the eroded mask from the original mask
+        mask_border = mask & ~eroded_mask
+
+        # Dilate the border to thicken it
+        mask_border = binary_dilation(mask_border, iterations=1)
+
+        # Plot the land borders
+        ax.imshow(~mask_border, cmap='gray', extent=extent, alpha=0.9)
+
+
+    # Plot the variable of interest as a heatmap
+    c = ax.imshow(ds_dict[var_to_plot][0], cmap=color_map, vmin=vmin, vmax=vmax, extent=extent)
+
+    # Set the title and lables
     plt.title(title)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
-    # Create colorbar
-    sm = plt.cm.ScalarMappable(cmap=color_map, norm=plt.Normalize(vmin=vmin, vmax=vmax))
-    sm._A = []
-    cbar = plt.colorbar(sm, ax=ax, shrink=0.5)
+    # Add a colorbar with the specified label
+    cbar = plt.colorbar(c, ax=ax, shrink=0.5)
     cbar.set_label(label)
+
+    # Set colorbar ticks if specified
     if ticks and isinstance(ticks, list) and len(ticks) == 2:
         cbar.set_ticks(ticks)
 
+    # Save the figure if save_fig is True
     if save_fig:
         plt.savefig(file_name, bbox_inches='tight')
     plt.show()
