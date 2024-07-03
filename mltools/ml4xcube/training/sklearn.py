@@ -17,7 +17,7 @@ class Trainer:
             model: BaseEstimator,
             train_data: Union[Any, Tuple[np.ndarray, np.ndarray]],
             test_data: Optional[Union[Any, Tuple[np.ndarray, np.ndarray]]] = None,
-            metrics: List[Callable] = [mean_squared_error],
+            metrics: List[Callable] = None,
             model_path: Optional[str] = None,
             batch_training: bool = False,
             mlflow_run=None,
@@ -57,7 +57,7 @@ class Trainer:
             Optional[float]: The average score computed using the specified metrics.
         """
         if self.test_data and self.metrics:
-            total_score = 0
+            metric_sums = {name: 0.0 for name in self.metrics.keys()}
             count = 0
             if mode == 'Training':
                 for batch in self.train_data:
@@ -79,16 +79,20 @@ class Trainer:
                     inputs, targets = batch
                     inputs = inputs.numpy()
                     targets = targets.numpy()
-                    score = self.metrics[0](targets, self.model.predict(inputs))
+                    for name, metric in self.metrics.items():
+                        metric_value = metric(targets, self.model.predict(inputs))
+                        metric_sums[name] += metric_value * len(inputs)
 
                 else:
                     inputs = batch.numpy()
-                    score = self.metrics[0](inputs, self.model.predict(inputs))
-                total_score += score * len(inputs)
+                    for name, metric in self.metrics.items():
+                        metric_value = metric(inputs, self.model.predict(inputs))
+                        metric_sums[name] += metric_value * len(inputs)
                 count += len(inputs)
-            avg_score = total_score / count
-            print(f"{mode} Score: {avg_score:.4f}")
-            return avg_score
+            avg_metrics = {name: total / count for name, total in metric_sums.items()}
+            for name, value in avg_metrics.items():
+                print(f"{mode} {name}: {value:.4f}")
+            return avg_metrics
         return None
 
     def train(self) -> BaseEstimator:
@@ -103,10 +107,15 @@ class Trainer:
                 X_train, y_train = self.train_data
                 X_test, y_test = self.test_data
                 self.model.fit(X_train, y_train)
-                train_score = self.metrics[0](y_train, self.model.predict(X_train))
-                print(f"Training Score: {train_score:.4f}")
-                val_score = self.metrics[0](y_test, self.model.predict(X_test))
-                print(f"Validation Score: {val_score:.4f}")
+
+                train_scores = {name: metric(y_train, self.model.predict(X_train)) for name, metric in
+                                self.metrics.items()}
+                for name, score in train_scores.items():
+                    print(f"Training | {name}: {score:.4f}")
+
+                val_scores = {name: metric(y_test, self.model.predict(X_test)) for name, metric in self.metrics.items()}
+                for name, score in val_scores.items():
+                    print(f"Validation | {name}: {score:.4f}")
             else:
                 X_train = self.train_data
                 self.model.fit(X_train)
@@ -115,19 +124,22 @@ class Trainer:
                 train_pred = self.model.predict(X_train)
 
                 # Calculating the scores based on available metrics
-                train_score = self.metrics[0](X_train, train_pred)
-                print(f"Score: {train_score:.4f}")
+                train_scores = {name: metric(X_train, train_pred) for name, metric in self.metrics.items()}
+                for name, score in train_scores.items():
+                    print(f"{name}: {score:.4f}")
 
         else:
-            train_score = self.run_batch_training(mode='Training')
+            train_scores = self.run_batch_training(mode='Training')
             if self.task_type == 'supervised':
-                val_score = self.run_batch_training(mode='Validation')
+                val_scores = self.run_batch_training(mode='Validation')
 
         if self.mlflow_run:
             # Logging metrics
-            self.mlflow_run.log_metric("training_score", train_score)
+            for name, score in train_scores.items():
+                self.mlflow_run.log_metric(f"training_{name}", score)
             if self.task_type == 'supervised':
-                self.mlflow_run.log_metric("validation_score", val_score)
+                for name, score in val_scores.items():
+                    self.mlflow_run.log_metric(f"validation_{name}", score)
 
         if self.model_path:
             # Pickling the model to save
