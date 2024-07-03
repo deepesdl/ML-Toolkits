@@ -82,16 +82,18 @@ def main(save_every: int, total_epochs: int, batch_size: int, snapshot_path: str
 
     # Initialize the trainer and start training
     trainer = Trainer(
-        model           = model,
-        train_data      = train_loader,
-        test_data       = test_loader,
-        optimizer       = optimizer,
-        save_every      = save_every,
-        best_model_path = best_model_path,
-        early_stopping  = True,
-        snapshot_path   = snapshot_path,
-        patience        = 3,
-        loss            = loss)
+        model                = model,
+        train_data           = train_loader,
+        test_data            = test_loader,
+        optimizer            = optimizer,
+        save_every           = save_every,
+        best_model_path      = best_model_path,
+        early_stopping       = True,
+        snapshot_path        = snapshot_path,
+        patience             = 3,
+        loss                 = loss,
+        validate_parallelism = True
+    )
 
     dist_train(trainer, total_epochs)
 
