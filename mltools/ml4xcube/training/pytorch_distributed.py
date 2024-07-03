@@ -2,11 +2,12 @@ import os
 import torch
 import torch.distributed as dist
 from time import time
+from typing import Dict, Callable
 from torch.utils.data import DataLoader
 from ml4xcube.training.train_plots import plot_loss
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.elastic.multiprocessing.errors import record
 from torch.distributed import init_process_group, destroy_process_group
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 def ddp_init() -> None:
@@ -38,7 +39,7 @@ class Trainer:
             early_stopping: bool = True,
             patience: int = 10,
             loss = None,
-            metrics: list = None,
+            metrics: Dict[str, Callable] = None,
             validate_parallelism: bool = False,  # New parameter to control loss printing
             create_loss_plot: bool = False
     ):
@@ -52,13 +53,13 @@ class Trainer:
             optimizer (torch.optim.Optimizer): Optimizer for training.
             save_every (int): Frequency of saving training snapshots (in epochs).
             best_model_path (str): Path to save the best model.
-            snapshot_path (Optional[str]): Path to save training snapshots. Defaults to None.
+            snapshot_path (Optional[str]): Path to save training snapshots.
             early_stopping (bool): Enable or disable early stopping. Defaults to True.
-            patience (int): Number of epochs to wait for improvement before stopping early. Defaults to 10.
+            patience (int): Number of epochs to wait for improvement before stopping early.
             loss (Optional[Callable]): Loss function. Defaults to None.
-            metrics (Optional[List[Callable]]): List of metrics to evaluate. Defaults to None.
-            validate_parallelism (bool): Whether to print loss for each GPU. Defaults to False.
-            create_loss_plot (bool): Whether to create a plot of training and validation loss. Defaults to False.
+            metrics (Optional[Dict[str, Callable]]): Dictionary of metrics to evaluate, with metric names as keys and metric functions as values.
+            validate_parallelism (bool): Whether to print loss for each GPU.
+            create_loss_plot (bool): Whether to create a plot of training and validation loss.
         """
         self.gpu_id = int(os.environ["LOCAL_RANK"])  # GPU ID for the current process
         self.model = model.to(self.gpu_id)  # Moves model to the correct device
@@ -74,7 +75,7 @@ class Trainer:
         self.best_val_loss = float('inf')  # Best validation loss for early stopping
         self.strikes = 0  # Counter for epochs without improvement
         self.loss = loss # Loss function
-        self.metrics = metrics # List of metrics to compute for validation purposes
+        self.metrics = metrics # Dict of metrics to compute for validation purposes
         self.model = DDP(self.model, device_ids=[self.gpu_id], find_unused_parameters=True)  # Wraps the model for DDP
         self.validate_parallelism = validate_parallelism
         self.create_loss_plot = create_loss_plot
@@ -105,16 +106,11 @@ class Trainer:
         Returns:
             torch.Tensor: The loss value for the batch.
         """
-        start_time = time()
         inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
         self.optimizer.zero_grad()
         outputs = self.model(inputs)
         loss = self.loss(outputs, targets)
-        if loss.requires_grad:  # Check if loss requires gradients
-            loss.backward()
-
-        end_time = time()  # End timing the batch processing
-        batch_processing_time = end_time - start_time  # Calculate processing time
+        loss.backward()
 
         if self.validate_parallelism:  # Check if loss printing is enabled
             # Print loss for the current GPU along with the processing time of the batch
@@ -153,17 +149,32 @@ class Trainer:
         self.model.eval()  # Set the model to evaluation mode
         running_loss = 0.0
         running_size = 0
-
+        metric_sums = {}
+        if self.metrics is not None:
+            metric_sums = {name: 0.0 for name in self.metrics.keys()}
         for inputs, targets in self.test_data:
             with torch.no_grad():  # No need to track gradients during validation
                 if inputs.numel() == 0: continue
-                loss = self._run_batch(inputs, targets)
-            running_loss += loss.item() * len(inputs)
-            running_size += len(inputs)
+                inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
+                outputs = self.model(inputs)
+                loss = self.loss(outputs, targets)
+                running_loss += loss.item() * len(inputs)
+                running_size += len(inputs)
+
+                if self.metrics is not None:
+                    for name, metric in self.metrics.items():
+                        metric_value = metric(outputs, targets).item()
+                        metric_sums[name] += metric_value * len(inputs)
 
         # Convert running loss and size to tensors for all_reduce operation
         running_loss_tensor = torch.tensor([running_loss], device=self.gpu_id)
         running_size_tensor = torch.tensor([running_size], device=self.gpu_id)
+
+        if self.metrics is not None:
+            running_metrics_tensors = {
+                name: torch.tensor([metric_sum], device=self.gpu_id)
+                for name, metric_sum in metric_sums.items()
+            }
 
         dist.barrier()
 
@@ -174,11 +185,23 @@ class Trainer:
         # Compute the average loss across all GPUs and samples
         avg_val_loss = running_loss_tensor.item() / running_size_tensor.item()
 
+        # Compute average metrics across all GPUs
+        if self.metrics is not None:
+            for name, tensor in running_metrics_tensors.items():
+                dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+
+            avg_metrics = {
+                name: (metric_sum / running_size_tensor.item())
+                for name, metric_sum in running_metrics_tensors.items()
+            }
+
         self.val_list.append(avg_val_loss)
 
         if self.gpu_id == 0:
             print(f"Validation Loss: {avg_val_loss:.4e}")
-
+            if self.metrics is not None:
+                for name, value in avg_metrics.items():
+                    print(f"{name}: {value:.4e}")
         return avg_val_loss
 
     def _save_snapshot(self, epoch: int) -> None:
