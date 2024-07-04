@@ -191,7 +191,7 @@ class Trainer:
                 dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
 
             avg_metrics = {
-                name: (metric_sum / running_size_tensor.item())
+                name: (metric_sum.item() / running_size_tensor.item())
                 for name, metric_sum in running_metrics_tensors.items()
             }
 
