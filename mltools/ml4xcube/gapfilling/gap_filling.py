@@ -23,6 +23,11 @@ from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 In this file the gaps created in the GapDataset class will be filled.
 The Gapfiller class builds for each missing value an own model.
 So far only Support Vector Regression is tested but other ML algorithms, hyperparameters and predictors can be added.
+
+Example
+```
+    Gapfiller(ds_name='GermanyNB123', learning_function="SVR", hyperparameters="RandomGridSearch", predictor="lccs_class").gapfill()
+```
 """
 
 
@@ -33,7 +38,7 @@ class Gapfiller:
 
     Example:
     ```
-    Gapfill(ds_name='Test123', learning_function='SVR' hyperparameters='RandomGridSearch', predictor='LCC').gapfill()
+    Gapfill(ds_name='Test123', learning_function='SVR' hyperparameters='RandomGridSearch', predictor='lccs_class').gapfill()
     ```
     """
     def __init__(self, ds_name: str = "Test123", learning_function: str = "SVR",
@@ -45,17 +50,19 @@ class Gapfiller:
             ds_name (str): The name of the dataset.
             learning_function (str): The type of learning function.
             hyperparameters (str): Hyperparameter search method ('RandomGridSearch' | 'FullGridSearch' | 'Custom').
-            predictor (str): Predictor strategy ('AllPoints' | 'LCC' | 'RandomPoints').
+            predictor (str): Predictor strategy ('AllPoints' | 'RandomPoints' | 'lccs_class' or other extra matrix predictors).
+
             actual_matrix (np.ndarray): The actual data matrix with gaps.
             data_with_gaps (dict): A dictionary containing data matrices with different gap sizes.
             directory (str): The directory where results and data are stored.
+            dimensions (dict): A dictionary containing data dimensions and the variable.
             gap_value (float): The gap value in the data (np.nan for real gaps and -100 for artificial gaps).
             metadata (dict): Metadata associated with the dataset.
             pool (multiprocessing.dummy.Pool): A pool of worker processes for parallelization.
             scores (dict): Dictionary to store MAE scores for gap filling results.
             temp_gap_array (np.ndarray): Temporary data array with gaps for gap filling.
             temp_known_pixels (int): Number of known pixels in the temporary data array.
-            training_data (ndarray): Historical data matrices.
+            training_data (ndarray): Training data matrices (e.g. historical data).
         """
         self.ds_name = ds_name
         self.learning_function = learning_function
@@ -66,6 +73,7 @@ class Gapfiller:
         self.data_with_gaps = {}
         self.directory = os.path.dirname(os.getcwd()) + '/application_results/' + ds_name + "/" if \
             os.getcwd().split('/')[-1] != 'gapfilling' else 'application_results/' + ds_name + "/"
+        self.dimensions = {}
         self.gap_value = np.nan
         self.metadata = {}
         self.pool = None
@@ -106,17 +114,25 @@ class Gapfiller:
         """
         Retrieve and organize data arrays needed for gap filling.
 
-        This method loads historical data as training data, the actual data matrix and if artificial gaps were created,
+        This method loads (historical) data as training data, the actual data matrix and if artificial gaps were created,
         data with gaps for different gap sizes. It prepares these arrays for the gap filling process.
 
         Returns:
             None
         """
-        # Open the cube and identify the variables
+        # Open the cube and identify the variables and dimensions
         self.actual_matrix = xr.open_zarr(self.directory + "actual.zarr")
-        actual_date = np.datetime_as_string(self.actual_matrix.time, unit='D')
+        variable = str(list(self.actual_matrix.data_vars)[0])
+        self.dimensions["variable"] = variable
+        self.dimensions["dim2"] = self.actual_matrix[self.dimensions["variable"]].dims[0]
+        self.dimensions["dim3"] = self.actual_matrix[self.dimensions["variable"]].dims[1]
+        dim1 = [dim for dim in list(self.actual_matrix.variables) if dim not in list(self.dimensions.values())][0]
+        self.dimensions["dim1"] = dim1
+        try:
+            actual_date = np.datetime_as_string(self.actual_matrix[dim1], unit='D')
+        except:
+            actual_date = str(self.actual_matrix[dim1])
         gap_imitation_directory = self.directory + "GapImitation/"
-        variable = [v for v in list(self.actual_matrix.variables) if v not in ["lat", "lon", "time"]][0]
 
         # Load and process gap imitation arrays if they exist
         if os.path.exists(gap_imitation_directory):
@@ -133,13 +149,18 @@ class Gapfiller:
             gap_size = round(gaps_absolute / self.actual_matrix[variable].size, 3)
             self.data_with_gaps[gap_size] = self.actual_matrix[variable].to_numpy()
 
-        # Open the data cube and extract data for each time step in the cube and save it in a NumPy array
+        # Open the data cube and extract data for each training data (time) step in the cube and save it in a NumPy array
         cube = xr.open_zarr(self.directory + "cube.zarr")
-        for t in cube.time:
-            # select the historical data as trainings data but avoid including the original array
-            if actual_date != np.datetime_as_string(t, unit='D'):
-                array = cube.sel(time=t.data)[variable].to_numpy()
-                self.training_data.append(array)
+        for t in cube[dim1]:
+            # select the (historical) data as trainings data but avoid including the original array
+            try:
+                if actual_date != np.datetime_as_string(t, unit='D'):
+                    array = cube.sel(**{dim1: t.data})[variable].to_numpy()
+                    self.training_data.append(array)
+            except:
+                if actual_date != str(t):
+                    array = cube.sel(**{dim1: t.data})[variable].to_numpy()
+                    self.training_data.append(array)
         self.training_data = np.array(self.training_data)
 
     def print_insights(self) -> None:
@@ -153,10 +174,13 @@ class Gapfiller:
             None
         """
         formatted_gaps = [str(round(float(g) * 100, 1)) + "%" for g in list(self.data_with_gaps.keys())]
-        actual_date = np.datetime_as_string(self.actual_matrix.time, unit='D')
+        try:
+            actual_date = np.datetime_as_string(self.actual_matrix[self.dimensions["dim1"]], unit='D')
+        except:
+            actual_date = str(self.actual_matrix[self.dimensions["dim1"]])
         print(f"Fill the gaps of {len(formatted_gaps)} array(s) with the following gap size: {', '.join(formatted_gaps)}")
         print(f"The array(s) are saved in: /{self.directory}")
-        print(f"Date: {actual_date} \n")
+        print(f"Original array: {actual_date} \n")
 
     def process_gap_array(self, gap_size: float) -> np.ndarray:
         """
@@ -254,8 +278,8 @@ class Gapfiller:
                 coords = np.argwhere(self.temp_gap_array != self.gap_value)
         elif self.predictor == "RandomPoints":
             coords = self.get_random_points()  # Get random non-gap points
-        elif self.predictor == "LCC":
-            coords = self.get_extra_matrix_points(gap_index)  # Get points based on LCC
+        else:
+            coords = self.get_extra_matrix_points(gap_index)  # Get points based on extra predictor matrix
 
         # If no valid coordinates are available, perform gap interpolation
         if type(coords) == str:
@@ -268,7 +292,7 @@ class Gapfiller:
                 actual_score = "not available"
             return gap_index, prediction, actual_score, validation_score
 
-        if self.predictor != "LCC":
+        if self.predictor == 'AllPoints' or self.predictor == 'RandomPoints':
             coords = list(coords)
             coords.append([gap_index[0], gap_index[1]])
 
@@ -304,8 +328,7 @@ class Gapfiller:
             prediction = prediction.item()
 
         if self.gap_value == -100:
-            variable = [variable for variable in list(self.actual_matrix.variables) if variable not in ["lat", "lon", "time"]][0]
-            actual_value = self.actual_matrix[variable].data[gap_index[0], gap_index[1]]
+            actual_value = self.actual_matrix[self.dimensions["variable"]].data[gap_index[0], gap_index[1]]
             actual_score = abs(actual_value - prediction)
         else:
             actual_score = "not available"
@@ -391,30 +414,33 @@ class Gapfiller:
         """
         Get coordinates based on the extra matrix (e.g. Land Cover Classification (LCC)) of the target pixel.
 
-        This method selects coordinates based on the LCC of the target pixel to improve predictor selection.
-        It ensures that predictors come from the same LCC biome as the target pixel.
+        This method selects coordinates based on an extra parameter value (e.g. LCC) of the target pixel
+        to improve predictor selection. It ensures that predictors come from the same parameter value (e.g. LCC)
+        as the target pixel.
 
         Args:
             gap_index (Tuple[int, int]): The index (row, column) of the gap to be filled.
 
         Returns:
-            Union[List[List[int]], str]: A list of coordinates based on LCC if there are enough coordinates within the same biome;
+            Union[List[List[int]], str]: A list of coordinates based on extra parameter (e.g. LCC) if there are enough
+                                         coordinates within the same class (e.g. biome) or have the same value;
                                          otherwise, a message indicating insufficient known pixels.
         """
-        extra_matrix = xr.open_zarr(self.directory + "extra_matrix_lcc.zarr")['lccs_class'].to_numpy()
+        extra_matrix = xr.open_zarr(self.directory + "extra_matrix_" + self.predictor + ".zarr")[self.predictor].to_numpy()
 
-        # Extract the LCC value for the pixel to be filled
+
+        # Extract the predictor parameter (e.g. LCC) value for the pixel to be filled
         extra_code = extra_matrix[gap_index[0], gap_index[1]]
-        # Create a copy of the LCC matrix with cloud-covered areas set to gap values
+        # Create a copy of the extra matrix with nan-values (e.g. cloud-covered areas) set to gap values
         if np.isnan(self.gap_value):
             new_extra_matrix = np.where(np.isnan(self.temp_gap_array), self.gap_value, extra_matrix)
         else:
             new_extra_matrix = np.where(self.temp_gap_array == self.gap_value, self.gap_value, extra_matrix)
 
-        # Find coordinates of points within the same LCC biome and not omitted
+        # Find coordinates of points within the same predictor parameter values (e.g. LCC biome) and not omitted
         coords = np.argwhere(new_extra_matrix == extra_code)
 
-        # Check if there are less than 40 available coordinates within the same LCC
+        # Check if there are less than 40 available coordinates within the same predictor parameter value
         if len(coords) < 40:
             # Get 100 random non-gap coordinates as predictors
             coords = self.get_random_points()
@@ -529,10 +555,13 @@ class Gapfiller:
             coords=self.actual_matrix.coords,
             attrs=self.actual_matrix.attrs
         )
+        try:
+            actual_date = np.datetime_as_string(self.actual_matrix[self.dimensions["dim1"]], unit='D')
+        except:
+            actual_date = str(self.actual_matrix[self.dimensions["dim1"]])
 
-        actual_date = np.datetime_as_string(self.actual_matrix.time, unit='D')
         filename = ''.join((actual_date, '-', str(gap_size), '.zarr'))
-        filled_xr_array.to_zarr(self.directory + "Results/" + filename)
+        filled_xr_array.to_zarr(self.directory + "Results/" + filename, mode="w")
 
         # Calculate and round the mean absolute error (MAE) for actual scores if true matrix exists
         if os.path.exists(self.directory + "GapImitation/"):
