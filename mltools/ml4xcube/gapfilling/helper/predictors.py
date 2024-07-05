@@ -1,5 +1,6 @@
 from xcube.core.store import new_data_store
 import numpy as np
+import os
 
 """
 The python file gets global predictor data e.g. land cover classification data for the corresponding dimensions as the 
@@ -59,8 +60,9 @@ class HelpingPredictor:
             predictor_array = self.process_lccs(predictor_array)
 
         # Save the processed predictor data to a zarr dataset
-        if self.predictor == 'lccs_class':
-            predictor_array.to_zarr('global_' + self.predictor + '.zarr', mode="w")
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        filename = 'global_' + self.predictor + '.zarr'
+        predictor_array.to_zarr(os.path.join(current_dir, filename), mode="w")
 
     def extract_data(self, dim1_coord_variable, dim2_coord_variable):
         """
