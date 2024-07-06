@@ -47,14 +47,14 @@ def load_train_objs():
 
     # Convert Zarr stores to Dask arrays and then to xarray Datasets
     train_data = {var: da.from_zarr(train_store[var]) for var in train_store.array_keys()}
-    test_data = {var: da.from_zarr(test_store[var]) for var in test_store.array_keys()}
+    test_data  = {var: da.from_zarr(test_store[var]) for var in test_store.array_keys()}
 
     # Assign dimensions using the assign_dims function
     train_data = assign_dims(train_data, ('samples', ))
-    test_data = assign_dims(test_data, ('samples', ))
+    test_data  = assign_dims(test_data, ('samples', ))
 
     train_set = xr.Dataset(train_data)
-    test_set = xr.Dataset(test_data)
+    test_set  = xr.Dataset(test_data)
 
     # Create PyTorch data sets
     train_ds = LargeScaleXrDataset(train_set)
