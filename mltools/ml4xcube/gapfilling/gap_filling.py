@@ -40,14 +40,13 @@ class Gapfiller:
     Gapfill(ds_name='Test123', learning_function='SVR' hyperparameters='RandomGridSearch', predictor='lccs_class').gapfill()
     ```
     """
-    def __init__(self, ds_name: str = "Test123", learning_function: str = "SVR",
-                 hyperparameters: str = "RandomGridSearch", predictor: str = "RandomPoints"):
+    def __init__(self, ds_name: str = "Test123", hyperparameters: str = "RandomGridSearch", predictor: str = "RandomPoints"):
         """
         Initialize the Gapfiller class.
 
         Attributes:
             ds_name (str): The name of the dataset.
-            learning_function (str): The type of learning function.
+            learning_function (str): The type of learning function. (for now SVR only)
             hyperparameters (str): Hyperparameter search method ('RandomGridSearch' | 'FullGridSearch' | 'Custom').
             predictor (str): Predictor strategy ('AllPoints' | 'RandomPoints' | 'lccs_class' or other extra matrix predictors).
             actual_matrix (np.ndarray): The actual data matrix with gaps.
@@ -63,7 +62,7 @@ class Gapfiller:
             training_data (ndarray): Training data matrices (e.g. historical data).
         """
         self.ds_name = ds_name
-        self.learning_function = learning_function
+        self.learning_function = "SVR"
         self.hyperparameters = hyperparameters
         self.predictor = predictor
         self.actual_matrix = None
