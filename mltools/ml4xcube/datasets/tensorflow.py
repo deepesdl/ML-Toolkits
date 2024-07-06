@@ -2,7 +2,7 @@ import random
 import numpy as np
 import xarray as xr
 import tensorflow as tf
-from typing import Tuple, Optional, List, Dict
+from typing import Tuple, List, Dict
 from ml4xcube.cube_utilities import split_chunk
 from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks
 from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_masked_data
@@ -13,9 +13,9 @@ class LargeScaleXrDataset:
                  chunk_indices: list = None, drop_nan_masked: bool = False, use_filter: bool = True,
                  drop_sample: bool = False, fill_method: str = None, const: float = None,
                  filter_var: str = 'land_mask', num_chunks: int = None, callback_fn = None,
-                 block_sizes: Optional[List[Tuple[str, int]]] = None,
-                 sample_size: Optional[List[Tuple[str, int]]] = None,
-                 overlap: Optional[List[Tuple[str, int]]] = None):
+                 block_size: List[Tuple[str, int]] = None,
+                 sample_size: List[Tuple[str, int]] = None,
+                 overlap: List[Tuple[str, int]] = None):
         """
         Initialize the dataset for TensorFlow, managing large datasets efficiently.
 
@@ -26,14 +26,14 @@ class LargeScaleXrDataset:
             drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
             use_filter (bool): If true, apply the filter based on the specified filter_var.
             drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
-            fill_method (Optional[str]): Method to fill masked data, if any.
-            const (Optional[float]): Constant value to use for filling masked data, if needed.
+            fill_method (str): Method to fill masked data, if any.
+            const (float): Constant value to use for filling masked data, if needed.
             filter_var (str): Filtering variable name.
-            num_chunks (Optional[int]): Number of chunks to process dynamically.
-            callback_fn (Optional[Callable]): Function to apply to each chunk after preprocessing.
-            block_sizes (Optional[List[Tuple[str, int]]]): Block sizes for considered blocks (of (sub-)chunks).
-            sample_size (Optional[List[Tuple[str, int]]]): Sample size for chunk splitting.
-            overlap (Optional[List[Tuple[str, int]]]): Overlap for overlapping samples due to chunk splitting.
+            num_chunks (int): Number of chunks to process dynamically.
+            callback_fn (Callable): Function to apply to each chunk after preprocessing.
+            block_size (List[Tuple[str, int]]): Block sizes for considered blocks (of (sub-)chunks).
+            sample_size (ist[Tuple[str, int]]): Sample size for chunk splitting.
+            overlap (List[Tuple[str, int]]): Overlap for overlapping samples due to chunk splitting.
             total_chunks (int): Total number of chunks in the dataset.
             chunk_indices (List[int]): List of indices specifying which chunks to process.
         """
@@ -48,7 +48,7 @@ class LargeScaleXrDataset:
         self.filter_var = filter_var
         self.num_chunks = num_chunks
         self.callback_fn = callback_fn
-        self.block_sizes = block_sizes
+        self.block_size = block_size
         self.sample_size = sample_size
         self.overlap = overlap
         self.total_chunks = calculate_total_chunks(xr_dataset)
@@ -77,12 +77,7 @@ class LargeScaleXrDataset:
         """
         for idx in self.chunk_indices:
             chunk = get_chunk_by_index(self.ds, idx)
-
-            if self.sample_size is not None:
-                cf = {x: chunk[x] for x in chunk.keys()}
-                cf = split_chunk(cf, self.sample_size, overlap=self.overlap)
-            else:
-                cf = {x: chunk[x].ravel() for x in chunk.keys()}
+            cf = split_chunk(chunk, self.sample_size, overlap=self.overlap)
 
             if self.use_filter:
                 cft = apply_filter(cf, self.filter_var, self.drop_sample)
