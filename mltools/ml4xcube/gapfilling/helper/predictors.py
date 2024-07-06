@@ -1,6 +1,7 @@
-from xcube.core.store import new_data_store
-import numpy as np
 import os
+import numpy as np
+import xarray as xr
+from typing import List
 
 """
 The python file gets global predictor data e.g. land cover classification data for the corresponding dimensions as the 
@@ -10,47 +11,60 @@ During the area slicing process the zarr dataset is the source for the data in o
 Once the global zarr dataset is executed, the dataset can be used for all gapfilling example applications.
 This file can be helpful to extract other variables as predictors and match the coordinates.
 
-Example:
-```
-    # Initializing the xcube datastore for s3 object storage and open the dataset of the variable you want to estimate
-    data_store = new_data_store("s3", root="esdl-esdc-v2.1.1", storage_options=dict(anon=True))
-    dataset = data_store.open_data('esdc-8d-0.083deg-184x270x270-2.1.1.zarr')
-    ds_variable = dataset['land_surface_temperature']
-
-    # Initializing the xcube datastore for s3 object storage and open the dataset of the predictor variable
-    predictor = 'lccs_class'
-    data_store = new_data_store("s3", root="deep-esdl-public", storage_options=dict(anon=True))
-    dataset = data_store.open_data('LC-1x2160x2160-1.0.0.levels')
-    ds_predictor = dataset.get_dataset(0)[predictor]
-
-    HelpingPredictor(ds_variable, ds_predictor, predictor).get_predictor_data()
-```
 """
 
 
 class HelpingPredictor:
-    """
-    Get the predictor data for a specific variable.
+    def __init__(self, ds: xr.Dataset, variable: str, ds_predictor: xr.DataArray, predictor_path: str,
+                 predictor: str = 'lccs_class', layer_dim: str = None):
+        """
+        Class to get the predictor data for a specific variable.
 
-    Attributes:
-        ds_variable (xarray.DataArray): The dataset with the target variable you want to estimate
-        ds_predictor (xarray.DataArray): The dataset with the predictor variable that will help the estimation
-        predictor (str): The name of the predictor
-    """
-    def __init__(self, ds_variable, ds_predictor, predictor='lccs_class'):
-        self.ds_variable = ds_variable[0]
-        self.ds_predictor = ds_predictor[0]
+        Attributes:
+            ds_variable (xarray.DataArray): The dataset with the target variable you want to estimate.
+            ds_predictor (xarray.DataArray): The dataset with the predictor variable that will help the estimation.
+            predictor (str): The name of the predictor variable.
+            predictor_path (str): The path to save the processed predictor data.
+            layer_dim (str): The dimension along which to iterate (e.g., 'time').
+        """
+        self.layer_dim = layer_dim
+        self.ds_variable = ds[variable]
+        self.initialize_dimensions(list(self.ds_variable.dims))
+        self.ds_variable = self.ds_variable.isel({self.layer_dim: 0})
+        self.ds_predictor = ds_predictor.isel({self.layer_dim: 0})
+        self.dim1 = self.ds_variable.dims[0]
+        self.dim2 = self.ds_variable.dims[1]
         self.predictor = predictor
+        self.predictor_path = predictor_path
+
+    def initialize_dimensions(self, dims: List[str]) -> None:
+        """
+        Initializes the dimensions for the predictor and target variables.
+
+        Args:
+            dims (List[str]): List of dimensions in the dataset.
+
+        Returns:
+            None
+        """
+        dim1, dim2, dim3 = dims[0], dims[1], dims[2]
+        if self.layer_dim is None:
+            self.layer_dim = dim1
+        layer_coords = [s for s in dims if s != self.layer_dim]
+        self.dim1 = layer_coords[0]
+        self.dim2 = layer_coords[1]
 
 
-    def get_predictor_data(self):
-        # Extracting the dimension names
-        dim1 = self.ds_variable.dims[0]
-        dim2 = self.ds_variable.dims[1]
+    def get_predictor_data(self) -> str:
+        """
+        Gets the predictor data for the specified variable and saves it to a zarr dataset.
 
+        Returns:
+            str: The file path of the saved zarr dataset.
+        """
         # Get the coordinates from both dimensions (e.g. lat, lon) from the dataset with variable that you will estimate.
-        dim1_coord_variable = self.ds_variable[dim1].values
-        dim2_coord_variable = self.ds_variable[dim2].values
+        dim1_coord_variable = self.ds_variable[self.dim1].values
+        dim2_coord_variable = self.ds_variable[self.dim2].values
 
         # Get predictor data for the corresponding coordinates
         predictor_array = self.extract_data(dim1_coord_variable, dim2_coord_variable)
@@ -60,23 +74,24 @@ class HelpingPredictor:
             predictor_array = self.process_lccs(predictor_array)
 
         # Save the processed predictor data to a zarr dataset
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        filename = 'global_' + self.predictor + '.zarr'
-        predictor_array.to_zarr(os.path.join(current_dir, filename), mode="w")
+        filepath = os.path.join(self.predictor_path, 'global_' + self.predictor + '.zarr')
+        predictor_array.to_zarr(filepath, mode="w")
+        return filepath
 
-    def extract_data(self, dim1_coord_variable, dim2_coord_variable):
+    def extract_data(self, dim1_coord_variable: np.ndarray, dim2_coord_variable: np.ndarray) -> xr.DataArray:
         """
-        Get predictor data for specified coordinates.
+        Extracts predictor data for specified coordinates.
 
-        This function extracts the predictor data for the specified dimensional coordinates (e.g. lat and lon).
+        Args:
+            dim1_coord_variable (np.ndarray): Coordinates of the first dimension (e.g., latitude).
+            dim2_coord_variable (np.ndarray): Coordinates of the second dimension (e.g., longitude).
+
+        Returns:
+            xr.DataArray: Extracted predictor data.
         """
-        # Extracting the dimension names
-        dim1 = self.ds_variable.dims[0]
-        dim2 = self.ds_variable.dims[1]
-
         # Extract the coordinates for the predictor data
-        dim1_coord_predictor = self.ds_predictor[dim1].values
-        dim2_coord_predictor = self.ds_predictor[dim2].values
+        dim1_coord_predictor = self.ds_predictor[self.dim1].values
+        dim2_coord_predictor = self.ds_predictor[self.dim2].values
 
         # Find indices for mapping coordinates
         dim1_indices = np.argmax(dim1_coord_predictor[:, None] <= dim1_coord_variable, axis=0) - 1
@@ -89,11 +104,15 @@ class HelpingPredictor:
         predictor_array = self.ds_predictor[dim1_indices, dim2_indices]
         return predictor_array
 
-    def process_lccs(self, lcc_array):
+    def process_lccs(self, lcc_array: xr.DataArray) -> xr.DataArray:
         """
-        Process and remap LCCS data.
+        Processes and remaps LCCS data.
 
-        This function remaps LCCS values based on a mapping dictionary and returns the processed data.
+        Args:
+            lcc_array (xr.DataArray): The LCCS data array to be processed.
+
+        Returns:
+            xr.DataArray: Processed LCCS data with remapped values.
         """
         # The granularity of the Land Cover Classes from the Earth System Data Cube is larger than necessary, e.g.
         # different types of mixed forests. Therefore, multiple types of a main LCC are grouped together as one.
