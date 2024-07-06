@@ -18,7 +18,6 @@ from sklearn.model_selection import KFold, cross_val_score
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 
 
-
 """
 In this file the gaps created in the GapDataset class will be filled.
 The Gapfiller class builds for each missing value an own model.
@@ -51,7 +50,6 @@ class Gapfiller:
             learning_function (str): The type of learning function.
             hyperparameters (str): Hyperparameter search method ('RandomGridSearch' | 'FullGridSearch' | 'Custom').
             predictor (str): Predictor strategy ('AllPoints' | 'RandomPoints' | 'lccs_class' or other extra matrix predictors).
-
             actual_matrix (np.ndarray): The actual data matrix with gaps.
             data_with_gaps (dict): A dictionary containing data matrices with different gap sizes.
             directory (str): The directory where results and data are stored.
@@ -68,7 +66,6 @@ class Gapfiller:
         self.learning_function = learning_function
         self.hyperparameters = hyperparameters
         self.predictor = predictor
-
         self.actual_matrix = None
         self.data_with_gaps = {}
         self.directory = os.path.dirname(os.getcwd()) + '/application_results/' + ds_name + "/" if \
