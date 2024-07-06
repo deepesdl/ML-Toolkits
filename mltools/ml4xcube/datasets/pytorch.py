@@ -4,19 +4,19 @@ import numpy as np
 import xarray as xr
 from ml4xcube.cube_utilities import split_chunk
 from torch.utils.data import Dataset, DataLoader
-from typing import Tuple, Optional, List, Callable, Dict
+from typing import Tuple, List, Callable, Dict
 from ml4xcube.cube_utilities import calculate_total_chunks, get_chunk_by_index
 from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_masked_data
 
 
 class LargeScaleXrDataset(Dataset):
     def __init__(self, xr_dataset: xr.Dataset, rand_chunk: bool = True, drop_nan: bool = True,
-                 chunk_indices: list = None, drop_nan_masked: bool = False, use_filter: bool = True,
+                 chunk_indices: List[int] = None, drop_nan_masked: bool = False, use_filter: bool = True,
                  drop_sample: bool = False, fill_method: str = None, const: float = None,
                  filter_var: str = 'land_mask', num_chunks: int = None,
-                 block_sizes: Optional[List[Tuple[str, int]]] = None,
-                 sample_size: Optional[List[Tuple[str, int]]] = None,
-                 overlap: Optional[List[Tuple[str, int]]] = None):
+                 block_sizes: List[Tuple[str, int]] = None,
+                 sample_size: List[Tuple[str, int]] = None,
+                 overlap: List[Tuple[str, int]] = None):
         """
         Initialize the dataset to manage large datasets efficiently.
 
@@ -31,11 +31,11 @@ class LargeScaleXrDataset(Dataset):
             const (float): Constant value to use for filling masked data, if needed.
             filter_var (str): Filtering variable name.
             num_chunks (int): Number of chunks to process dynamically.
-            block_sizes (Optional[List[Tuple[str, int]]]): Block sizes for considered blocks (of (sub-)chunks).
-            sample_size (Optional[List[Tuple[str, int]]]): Sample size for chunk splitting.
-            overlap (Optional[List[Tuple[str, int]]]): Overlap for overlapping samples due to chunk splitting.
+            block_sizes (List[Tuple[str, int]]): Block sizes for considered blocks (of (sub-)chunks).
+            sample_size (List[Tuple[str, int]]): Sample size for chunk splitting.
+            overlap (List[Tuple[str, int]]): Overlap for overlapping samples due to chunk splitting.
             total_chunks (int): Total number of chunks in the dataset.
-            chunk_indices (list): List of indices of chunks to load.
+            chunk_indices (List[int]): List of indices of chunks to load.
         """
         self.ds = xr_dataset
         self.rand_chunk = rand_chunk
@@ -83,13 +83,7 @@ class LargeScaleXrDataset(Dataset):
         chunk = get_chunk_by_index(self.ds, chunk_index)
 
         # Process the chunk
-        if self.sample_size is not None:
-            cf = {x: chunk[x] for x in chunk.keys()}
-
-            cf = split_chunk(cf, self.sample_size, overlap=self.overlap)
-
-        else:
-            cf = {x: chunk[x].ravel() for x in chunk.keys()}
+        cf = split_chunk(chunk, self.sample_size, overlap=self.overlap)
 
         if self.use_filter:
             cft = apply_filter(cf, self.filter_var, self.drop_sample)
@@ -120,7 +114,7 @@ def prepare_dataloader(dataset: Dataset, batch_size: int = 1, callback_fn: Calla
     Args:
         dataset (Dataset): The PyTorch dataset from which to load the data.
         batch_size (int): How many samples per batch to load. Defaults to 1.
-        callback_fn (Callable, optional): A function used to collate data into batches. Defaults to None.
+        callback_fn (Callable): A function used to collate data into batches. Defaults to None.
         num_workers (int): How many subprocesses to use for data loading. Defaults to 0.
         parallel (bool): Specifies if distributed training is performed. Defaults to False.
         shuffle (bool): Whether to shuffle the data at every epoch. Defaults to True.

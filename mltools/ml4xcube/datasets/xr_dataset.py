@@ -1,7 +1,7 @@
 import random
 import numpy as np
 import xarray as xr
-from typing import Tuple, Optional, List, Dict
+from typing import Tuple, List, Dict
 from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_masked_data
 from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks, split_chunk
 
@@ -13,31 +13,31 @@ class XrDataset():
                  use_filter: bool = True, drop_sample: bool = False,
                  fill_method: str = None, const: float = None,
                  filter_var: str = 'land_mask', patience: int = 500,
-                 block_size: Optional[List[Tuple[str, int]]] = None,
-                 sample_size: Optional[List[Tuple[str, int]]] = None,
-                 overlap: Optional[List[Tuple[str, int]]] = None,
+                 block_size: List[Tuple[str, int]] = None,
+                 sample_size: List[Tuple[str, int]] = None,
+                 overlap: List[Tuple[str, int]] = None,
                  num_chunks: int = None):
         """
         Creates a dataset of processed data chunks.
 
         Attributes:
             ds (xr.Dataset): The input dataset.
-            chunk_indices (Optional[List[int]]): List of indices specifying which chunks to process.
+            chunk_indices (List[int]): List of indices specifying which chunks to process.
             rand_chunk (bool): If true, chunks are chosen randomly.
             drop_nan (bool): If true, NaN values are dropped.
             strict_nan (bool): If true, discard the entire chunk if any NaN is found in any variable.
             drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
             use_filter (bool): If true, apply the filter based on the specified filter_var.
             drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
-            fill_method (Optional[str]): Method to fill masked data, if any.
-            const (Optional[float]): Constant value to use for filling masked data, if needed.
+            fill_method (str): Method to fill masked data, if any.
+            const (float): Constant value to use for filling masked data, if needed.
             filter_var (str): The variable to use for filtering.
             patience (int): The number of consecutive iterations without a valid chunk before stopping.
-            block_size (Optional[List[Tuple[str, int]]]): Block sizes for considered blocks (of (sub-)chunks).
-            sample_size (Optional[List[Tuple[str, int]]]): Sample size for chunk splitting.
-            overlap (Optional[List[Tuple[str, int]]]): Overlap for overlapping samples due to chunk splitting.
+            block_size (List[Tuple[str, int]]): Block sizes for considered blocks (of (sub-)chunks).
+            sample_size (List[Tuple[str, int]]): Sample size for chunk splitting.
+            overlap (List[Tuple[str, int]]): Overlap for overlapping samples due to chunk splitting.
             total_chunks (int): Total number of chunks in the dataset.
-            num_chunks (Optional[int]): The number of unique chunks to process.
+            num_chunks (int): The number of unique chunks to process.
             chunks (List[Dict[str, np.ndarray]]): List of processed data chunks.
             dataset (Dict[str, np.ndarray]): Concatenated dataset from the processed chunks.
         """
@@ -109,12 +109,7 @@ class XrDataset():
             Tuple[Dict[str, np.ndarray], bool]: A tuple containing the preprocessed chunk and a boolean indicating if the chunk is valid.
         """
         # Split a chunk into samples
-        if self.sample_size is not None:
-            cf = {x: chunk[x] for x in chunk.keys()}
-            cf = split_chunk(cf, self.sample_size, overlap=self.overlap)
-
-        else:
-            cf = {x: chunk[x].ravel() for x in chunk.keys()}
+        cf = split_chunk(chunk, self.sample_size, overlap=self.overlap)
 
         # Apply filtering based on the specified variable, if provided
         if self.use_filter:

@@ -4,38 +4,37 @@ import numpy as np
 import xarray as xr
 import dask.array as da
 from multiprocessing import Pool
-from typing import Tuple, Optional, Dict, List
+from typing import Tuple, Optional, Dict, List, Callable
 from ml4xcube.cube_utilities import split_chunk, assign_dims
 from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks
 from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_masked_data
 
 
-def process_chunk(chunk: Dict[str, np.ndarray], use_filter: bool, drop_sample: bool, filter_var: str,
-                  sample_size: Optional[List[int]], overlap: Optional[List[int]], callback_fn, drop_nan_masked: bool,
-                  fill_method: Optional[str], const: Optional[float]) -> Tuple[Dict[str, np.ndarray], bool]:
+def process_chunk(chunk: Dict[str, np.ndarray], use_filter: bool, drop_sample: bool, filter_var: Optional[str],
+                  sample_size: Optional[List[Tuple[str, int]]], overlap: Optional[List[Tuple[str, int]]], callback_fn: Optional[Callable],
+                  drop_nan_masked: bool, fill_method: Optional[str], const: Optional[float]
+                  ) -> Tuple[Dict[str, np.ndarray], bool]:
     """
     Process a single chunk of data.
 
     Args:
-        chunk (dict): A dictionary containing the data chunk to preprocess.
+        chunk (Dict[str, np.ndarray]): A dictionary containing the data chunk to preprocess.
         use_filter (bool): If true, apply the filter based on the specified filter_var.
         drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
-        filter_var (str): The variable to use for filtering.
-        sample_size (optional): Indices for splitting the chunk into samples.
-        overlap (optional): Overlap for overlapping samples due to chunk splitting.
-        callback_fn (function, optional): Optional callback function to apply to each chunk after preprocessing.
+        filter_var (Optional[str]): The variable to use for filtering.
+        sample_size (Optional[List[Tuple[str, int]]]): Sizes of the samples to be extracted from the chunk along each dimension.
+                                                       Each tuple contains the dimension name and the size along that dimension.
+        overlap (Optional[List[Tuple[str, int]]]): Overlap for overlapping samples due to chunk splitting.
+                                                   Each tuple contains the dimension name and the overlap fraction along that dimension.
+        callback_fn (Optional[Callable]): Optional callback function to apply to each chunk after preprocessing.
         drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
-        fill_method (str, optional): Method to fill masked data, if any.
-        const (float, optional): Constant value to use for filling masked data, if needed.
+        fill_method (Optional[str]): Method to fill masked data, if any.
+        const (float): Constant value to use for filling masked data, if needed.
 
     Returns:
-        tuple: A tuple containing the preprocessed chunk and a boolean indicating if the chunk is valid.
+        Tuple[Dict[str, np.ndarray], bool]: A tuple containing the preprocessed chunk and a boolean indicating if the chunk is valid.
     """
-    if sample_size is not None:
-        cf = {x: chunk[x] for x in chunk.keys()}
-        cf = split_chunk(cf, sample_size, overlap=overlap)
-    else:
-        cf = {x: chunk[x].ravel() for x in chunk.keys()}
+    cf = split_chunk(chunk, sample_size=sample_size, overlap=overlap)
 
     # Apply filtering based on the specified variable, if provided
     if use_filter:
@@ -115,13 +114,13 @@ class MultiProcSampler():
     def __init__(self, ds: xr.Dataset, rand_chunk: bool = False, drop_nan_masked: bool = False,
                  data_fraq: float = 1.0, nproc: int = 4, use_filter: bool = True,
                  drop_sample: bool = True, fill_method: str = None, const: float = None,
-                 filter_var: str = 'land_mask', chunk_size: Tuple = None,
+                 filter_var: str = 'land_mask', chunk_size: Tuple[int] = None,
                  train_cube: str = 'train_cube.zarr', test_cube: str = 'test_cube.zarr',
                  array_dims: Tuple[str, Optional[str], Optional[str]] = ('samples',),
-                 data_split: float = 0.8, chunk_batch: int = None, callback_fn = None,
-                 block_size: Optional[List[Tuple[str, int]]] = None,
-                 sample_size: Optional[List[Tuple[str, int]]] = None,
-                 overlap: Optional[List[Tuple[str, int]]] = None):
+                 data_split: float = 0.8, chunk_batch: int = None, callback_fn: Callable = None,
+                 block_size: List[Tuple[str, int]] = None,
+                 sample_size: List[Tuple[str, int]] = None,
+                 overlap: List[Tuple[str, int]] = None):
         """
         Initialize the MultiProcSampler with the given dataset and parameters.
 
@@ -134,18 +133,18 @@ class MultiProcSampler():
             use_filter (bool): If true, apply the filter based on the specified filter_var.
             drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
             fill_method (str): Method to fill masked data, if any.
-            const (float): Constant value to use for filling masked data, if needed.
-            filter_var (str): The variable to use for filtering.
-            chunk_size (Tuple): The size of chunks to process.
+            const (Optional[float]): Constant value to use for filling masked data, if needed.
+            filter_var (Optional[str]): The variable to use for filtering.
+            chunk_size (Tuple[int]): The size of chunks to process.
             train_store (zarr.Group): Zarr store for training data.
             test_store (zarr.Group): Zarr store for testing data.
             array_dims (Tuple[str, Optional[str], Optional[str]]): Tuple specifying the dimensions of the arrays.
             data_split (float): The fraction of data to use for training.
             chunk_batch (int): Number of chunks to process in each batch.
             callback_fn (function): Optional callback function to apply to each chunk after preprocessing.
-            block_size (Optional[List[Tuple[str, int]]]): Optional list specifying the block sizes for each dimension.
-            sample_size (Optional[List[Tuple[str, int]]]): List of tuples specifying the dimensions and their respective step sizes.
-            overlap (Optional[List[Tuple[str, int]]]): List of tuples specifying the dimensions and their respective overlap sizes.
+            block_size (List[Tuple[str, int]]): Optional list specifying the block sizes for each dimension.
+            sample_size (List[Tuple[str, int]]): List of tuples specifying the dimensions and their respective sizes.
+            overlap (List[Tuple[str, int]]): List of tuples specifying the dimensions and their respective overlap fractions.
             total_chunks (int): Total number of chunks in the dataset.
             num_chunks (int): Number of chunks to process.
         """
