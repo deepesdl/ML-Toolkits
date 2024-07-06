@@ -3,7 +3,7 @@ import xarray as xr
 from typing import Dict, List
 
 
-def apply_filter(ds, filter_var, drop_sample=False) -> Dict[str, np.ndarray]:
+def apply_filter(ds: Dict[str, np.ndarray], filter_var: str, drop_sample: bool = False) -> Dict[str, np.ndarray]:
     """
     Apply a filter to the dataset. If drop_sample is True and any value in a subarray does not belong to the mask (False),
     drop the entire subarray. If drop_sample is False, set all values to NaN which do not belong to the mask (False).
@@ -53,7 +53,7 @@ def drop_nan_values(ds: Dict[str, np.ndarray], vars: list, filter_var: str = Non
     Args:
         ds (Dict[str, np.ndarray]): The dataset to filter. It should be a dictionary where keys are variable names and values are numpy arrays.
         vars (list): The variables to check for NaN values.
-        filter_var (Optional[str]): The name of the mask variable in the dataset. If None, drop the entire subarray based on NaN values alone.
+        filter_var (str): The name of the mask variable in the dataset. If None, drop the entire subarray based on NaN values alone.
 
     Returns:
         Dict[str, np.ndarray]: The filtered dataset.
@@ -101,7 +101,7 @@ def drop_nan_values(ds: Dict[str, np.ndarray], vars: list, filter_var: str = Non
     return ds
 
 
-def fill_masked_data(ds: Dict[str, np.ndarray], vars: list, method: str = 'mean', const: float | str | bool = None) -> Dict[str, np.ndarray]:
+def fill_masked_data(ds: Dict[str, np.ndarray], vars: List[str], method: str = 'mean', const: float | str | bool = None) -> Dict[str, np.ndarray]:
     """
     Fill NaN values in the dataset. If method is 'mean', fill NaNs with the mean value of the non-NaN values.
     If method is 'noise', fill NaNs with random noise within the range of the non-NaN values.
@@ -109,7 +109,7 @@ def fill_masked_data(ds: Dict[str, np.ndarray], vars: list, method: str = 'mean'
 
     Args:
         ds (Dict[str, np.ndarray]): The dataset to fill. It should be a dictionary where keys are variable names and values are numpy arrays.
-        vars (list): The variables to fill NaN values for.
+        vars (List[str]): The variables to fill NaN values for.
         method (str): The method to use for filling NaN values. Options are 'mean', 'noise', or 'constant'.
         constant_value (float | str | bool): The constant value to use for filling NaN values when method is 'constant'.
 

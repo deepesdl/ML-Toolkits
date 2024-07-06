@@ -1,7 +1,6 @@
 import os
 import torch
 import torch.distributed as dist
-from time import time
 from typing import Dict, Callable
 from torch.utils.data import DataLoader
 from ml4xcube.training.train_plots import plot_loss
@@ -53,11 +52,11 @@ class Trainer:
             optimizer (torch.optim.Optimizer): Optimizer for training.
             save_every (int): Frequency of saving training snapshots (in epochs).
             best_model_path (str): Path to save the best model.
-            snapshot_path (Optional[str]): Path to save training snapshots.
+            snapshot_path (str): Path to save training snapshots.
             early_stopping (bool): Enable or disable early stopping. Defaults to True.
             patience (int): Number of epochs to wait for improvement before stopping early.
-            loss (Optional[Callable]): Loss function. Defaults to None.
-            metrics (Optional[Dict[str, Callable]]): Dictionary of metrics to evaluate, with metric names as keys and metric functions as values.
+            loss (Callable): Loss function.
+            metrics (Dict[str, Callable]): Dictionary of metrics to evaluate, with metric names as keys and metric functions as values.
             validate_parallelism (bool): Whether to print loss for each GPU.
             create_loss_plot (bool): Whether to create a plot of training and validation loss.
         """

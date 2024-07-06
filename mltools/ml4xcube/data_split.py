@@ -2,7 +2,7 @@ import random
 import warnings
 import xarray as xr
 import dask.array as da
-from typing import Optional, Tuple, List
+from typing import Tuple, List
 from ml4xcube.cube_utilities import get_chunk_sizes
 warnings.filterwarnings('ignore')
 
@@ -71,15 +71,21 @@ def cantor_tuple(index_list: List[int]) -> int:
     return t
 
 
-def assign_block_split(ds: xr.Dataset, block_size: Optional[List[Tuple[str, int]]] = None, split: float = 0.8) -> xr.Dataset:
+def assign_block_split(ds: xr.Dataset, block_size: List[Tuple[str, int]] = None, split: float = 0.8) -> xr.Dataset:
     """
-    Unique assignment of a tuple to a natural number, generalization of Cantor pairing to tuples.
+    Assign blocks of data to training or testing sets based on a specified split ratio.
+
+    This function uniquely assigns a block of data to either a training or testing set using a random process.
+    The random seed for the assignment is generated using a Cantor pairing function on the block's indices.
 
     Args:
-        index_list (List[int]): A list of integers representing the tuple.
+        ds (xr.Dataset): The input dataset.
+        block_size (List[Tuple[str, int]]): List of tuples specifying the dimensions and their respective sizes.
+                                            If None, chunk sizes are inferred from the dataset.
+        split (float): The fraction of data to assign to the training set. The remainder will be assigned to the testing set.
 
     Returns:
-        int: The unique natural number assigned to the tuple.
+        xr.Dataset: The input dataset with an additional variable 'split' that indicates whether each block belongs to the training (True) or testing (False) set.
     """
     if block_size is None:
         block_size = get_chunk_sizes(ds)

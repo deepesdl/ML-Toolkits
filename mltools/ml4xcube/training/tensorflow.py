@@ -1,6 +1,5 @@
 import os
 import tensorflow as tf
-from typing import Optional
 from ml4xcube.training.train_plots import plot_loss
 
 class Trainer:
@@ -19,8 +18,8 @@ class Trainer:
             tf_log_dir: str = './logs',
             mlflow_run = None,
             epochs: int = 100,
-            train_epoch_steps: Optional[int] = None,
-            val_epoch_steps: Optional[int] = None,
+            train_epoch_steps: int = None,
+            val_epoch_steps: int = None,
             create_loss_plot: bool = False,
     ):
         """
@@ -36,8 +35,8 @@ class Trainer:
             tf_log_dir (str): Directory to save TensorBoard logs. Defaults to './logs'.
             mlflow_run: MLflow run object for logging artifacts. Defaults to None.
             epochs (int): Number of epochs to train the model. Defaults to 100.
-            train_epoch_steps (int, optional): Number of steps per training epoch. Defaults to None.
-            val_epoch_steps (int, optional): Number of steps per validation epoch. Defaults to None.
+            train_epoch_steps (int): Number of steps per training epoch. Defaults to None.
+            val_epoch_steps (int): Number of steps per validation epoch. Defaults to None.
             create_loss_plot (bool): Whether to create a plot of training and validation loss. Defaults to False.
         """
         self.model = model
