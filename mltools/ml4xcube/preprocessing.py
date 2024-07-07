@@ -48,7 +48,7 @@ def drop_nan_values(ds: Dict[str, np.ndarray], vars: list, filter_var: str = Non
     """
     Drop NaN values from the dataset. If any value in a subarray is NaN, drop the entire subarray.
     For lists of points, drop single NaN values. If filter_var is defined, it will use this mask
-    to determine validity of subarrays.
+    to determine validity of a sample.
 
     Args:
         ds (Dict[str, np.ndarray]): The dataset to filter. It should be a dictionary where keys are variable names and values are numpy arrays.

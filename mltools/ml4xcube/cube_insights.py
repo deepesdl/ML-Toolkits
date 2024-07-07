@@ -130,7 +130,7 @@ def get_insights(cube: xr.DataArray, variable: str, layer_dim: str = None) -> No
 # Function to generate a heat map of gap (NaN) counts for each lat/lon pixel (or other dimensions)
 def get_gap_heat_map(cube: xr.DataArray, count_dim: str) -> xr.DataArray:
     """
-    Generates a heat map of value counts (non-NaN values) for each latitude/longitude pixel.
+    Generates a heat map of value counts (non-NaN values) for each pixel along the count_dim dimension.
 
     Args:
         cube (xr.DataArray): The input data cube.
