@@ -183,7 +183,7 @@ def split_chunk(chunk: Dict[str, np.ndarray], sample_size: List[Tuple[str, int]]
         Dict[str, np.ndarray]: A dictionary where keys are variable names and values are the extracted points as numpy arrays.
     """
 
-    if sample_size is not None: return {x: chunk[x].ravel() for x in chunk.keys()}
+    if sample_size is None: return {x: chunk[x].ravel() for x in chunk.keys()}
     else: cf = {x: chunk[x] for x in chunk.keys()}
 
     # Extract the step sizes from the sample_size
@@ -270,8 +270,8 @@ def get_dim_range(cube: xr.DataArray, dim: str):
             min_val = np.datetime_as_string(cube[dim].values.min(), unit='D')
             max_val = np.datetime_as_string(cube[dim].values.max(), unit='D')
         else:
-            min_val = round(cube[dim].values.min(), 3)
-            max_val = round(cube[dim].values.max(), 3)
+            min_val = cube[dim].values.min()
+            max_val = cube[dim].values.max()
     except:
         min_val = cube[dim].values.min()
         max_val = cube[dim].values.max()
