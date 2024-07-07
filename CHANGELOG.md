@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.0.1] - 2024-07-07
+
+### Removed
+- Files that were unintentionally included in version 1.0.0 during the build have been removed to streamline the package and correct the release content.
+
+## [1.0.0] - 2024-07-07
+
+### Added
+- `cube_insights` module introduced to provide an overview of the data cube state.
+  - `get_insights` function for extracting and printing various characteristics of the data cube.
+  - `get_gap_heat_map` for generating heat maps of value counts (non-NaN values) across dimensions.
+- `training` module: 
+  - `plot_loss` method, accessible if `create_loss_plot` is true in Trainer classes (`pytorch`, `pytorch_distributed`, `sklearn`, `tensorflow`).
+  - If `mlflow_run` specified, models are saved under the name extracted from user defined model path instead of saving them under 'model' on `MlFlow` server.
+  - Option to define validation metrics dictionary added to Trainer classes added.
+- `datasets` module: 
+  - Introduced `MultiProcSampler` for efficient creation of train/test sets as zarr data cubes.
+- `cube_utilities` module:
+  - Added `split_chunk` to divide a chunk of the data cube into machine learning samples.
+  - Added `get_dim_range` for retrieving minimum and maximum values of specific cube dimensions.
+  - `assign_dims` function added to map user-defined dimension names for later transformation to xarray.
+- preprocessing module:
+  - Added `fill_masked_data` to fill NaNs using different methods (mean, noise, constant).
+
+### Changed:
+- `xr_plots` module:
+  - Renamed from `geo_plots` and transformed the `plot_geo_data` to `plot_slice`, utilizing NumPy instead of GeoPandas for increased performance and broader usability.
+- `gapfilling` module:
+  - Generalized to accommodate any naming convention of cube dimensions.
+  - Enabled user-defined directory storage for additional predictors extracted by `HelpingPredictor`.
+- `datasets` module: 
+  - Updated `LargeScaleXrDataset` for both, `PyTorch` and `TensorFlow`, and the `XrDataset` class to handle multidimensional data samples.
+- preprocessing module:
+  - `drop_nan_values` and `apply_filter` methods updated to handle multi-dimensional data.
+  - Introduced `drop_sample` option in `apply_filter` to decide on dropping samples or setting unmatched values to NaN.
+  - Updated `drop_nan_values` to utilize a mask for sample validity, dropping invalid samples or those with NaN values in valid data.
+
+### Updated Use Cases:
+- Added and updated examples in the `Examples` directory:
+  - `distributed_dataset_creation.py` demonstrating the use of `MultiProcSampler`.
+  - Updated `distributed_training.py` to utilize the new train and test sets.
+  - New masked learning examples on ESDCs (`use_case_lst_pytorch_masked.ipynb` and `use_case_lst_tensorflow_masked.ipynb`) for coastal region predictions, excluding water regions.
+
 ## [0.0.*] - 2024-05-14
 
 ### Added
