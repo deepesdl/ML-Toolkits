@@ -1,5 +1,5 @@
 {% set name = "ml4xcube" %}
-{% set version = "0.0.6" %}
+{% set version = "1.0.1" %}
 
 package:
   name: {{ name|lower }}
@@ -7,7 +7,7 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/ml4xcube-{{ version }}.tar.gz
-  sha256: 3f58ed6e4babf54cf935bc881348ceea99c8207c24e878d2e793bb8bb9221903
+  sha256: 71940469581071621384ba9b9f6ff89e4494612595de4392c4f6932c8741fb3c
 
 build:
   noarch: python
@@ -20,8 +20,6 @@ requirements:
     - pip
   run:
     - python >=3.8
-    - conda-forge::xcube
-    - bokeh >=2.4.3
     - dask-core >=2023.2.0
     - dask >=2023.2.0
     - numpy >=1.24
@@ -30,9 +28,7 @@ requirements:
     - xarray >2023.8.0
     - zarr >2.11
     - rechunker >=0.5.1
-    - sentinelhub
-
-
+    -
 test:
   imports:
     - ml4xcube

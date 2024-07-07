@@ -1,14 +1,15 @@
-from torch.utils.data import DataLoader
-from time import time
-from torch.distributed.elastic.multiprocessing.errors import record
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed import init_process_group, destroy_process_group
-import torch.distributed as dist
-import torch
 import os
+import torch
+import torch.distributed as dist
+from typing import Dict, Callable
+from torch.utils.data import DataLoader
+from ml4xcube.training.train_plots import plot_loss
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.elastic.multiprocessing.errors import record
+from torch.distributed import init_process_group, destroy_process_group
 
 
-def ddp_init():
+def ddp_init() -> None:
     """
     Initializes the distributed process group.
     Uses NCCL (NVIDIA Collective Communications Library) as the backend for GPU-based distributed training.
@@ -36,10 +37,29 @@ class Trainer:
             snapshot_path: str = None,
             early_stopping: bool = True,
             patience: int = 10,
-            metrics: list = None,
-            task_type: str = "supervised",
-            print_loss_per_gpu: bool = False  # New parameter to control loss printing
-    ) -> None:
+            loss = None,
+            metrics: Dict[str, Callable] = None,
+            validate_parallelism: bool = False,  # New parameter to control loss printing
+            create_loss_plot: bool = False
+    ):
+        """
+        Initialize the Trainer for distributed training.
+
+        Attributes:
+            model (torch.nn.Module): The PyTorch model to train.
+            train_data (DataLoader): DataLoader for the training data.
+            test_data (DataLoader): DataLoader for the validation/test data.
+            optimizer (torch.optim.Optimizer): Optimizer for training.
+            save_every (int): Frequency of saving training snapshots (in epochs).
+            best_model_path (str): Path to save the best model.
+            snapshot_path (str): Path to save training snapshots.
+            early_stopping (bool): Enable or disable early stopping. Defaults to True.
+            patience (int): Number of epochs to wait for improvement before stopping early.
+            loss (Callable): Loss function.
+            metrics (Dict[str, Callable]): Dictionary of metrics to evaluate, with metric names as keys and metric functions as values.
+            validate_parallelism (bool): Whether to print loss for each GPU.
+            create_loss_plot (bool): Whether to create a plot of training and validation loss.
+        """
         self.gpu_id = int(os.environ["LOCAL_RANK"])  # GPU ID for the current process
         self.model = model.to(self.gpu_id)  # Moves model to the correct device
         self.train_data = train_data
@@ -53,104 +73,109 @@ class Trainer:
         self.patience = patience  # Number of epochs to wait before early stop if no progress on the validation set
         self.best_val_loss = float('inf')  # Best validation loss for early stopping
         self.strikes = 0  # Counter for epochs without improvement
-        self.metrics = metrics if metrics is not None else [torch.nn.MSELoss(reduction='mean')]
+        self.loss = loss # Loss function
+        self.metrics = metrics # Dict of metrics to compute for validation purposes
         self.model = DDP(self.model, device_ids=[self.gpu_id], find_unused_parameters=True)  # Wraps the model for DDP
-        self.task_type = task_type  # The type of training task (supervised or unsupervised)
-        self.print_loss_per_gpu = print_loss_per_gpu
+        self.validate_parallelism = validate_parallelism
+        self.create_loss_plot = create_loss_plot
+        self.train_list = list()
+        self.val_list = list()
 
-    def _load_snapshot(self, snapshot_path: str):
+    def _load_snapshot(self, snapshot_path: str) -> None:
         """
         Loads a training snapshot to resume training.
 
-        Parameters:
-        - snapshot_path: The path to the training snapshot file.
+        Args:
+            snapshot_path (str): The path to the training snapshot file.
         """
         loc = f"cuda:{self.gpu_id}"
         snapshot = torch.load(snapshot_path, map_location=loc)
         self.model.load_state_dict(snapshot["MODEL_STATE"])
         self.epochs_run = snapshot["EPOCHS_RUN"]
-        print(f"Resuming training from snapshot at Epoch {self.epochs_run}")
+        print(f"Resuming training from snapshot at Epoch {self.epochs_run + 1}")
 
-    def _run_batch(self, inputs, targets):
+    def _run_batch(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         """
         Runs a single batch of training data through the model.
 
-        Parameters:
-        - inputs: Input data for the model.
-        - targets: Target data for the training.
+        Args:
+            inputs (torch.Tensor): Input data for the model.
+            targets (torch.Tensor): Target data for the training.
 
         Returns:
-        The loss value for the batch.
+            torch.Tensor: The loss value for the batch.
         """
-        start_time = time()
+        inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
         self.optimizer.zero_grad()
         outputs = self.model(inputs)
-        loss = self.metrics[0](outputs, targets)
-        if loss.requires_grad:  # Check if loss requires gradients
-            loss.backward()
+        loss = self.loss(outputs, targets)
+        loss.backward()
 
-        end_time = time()  # End timing the batch processing
-        batch_processing_time = end_time - start_time  # Calculate processing time
-
-        if self.print_loss_per_gpu:  # Check if loss printing is enabled
+        if self.validate_parallelism:  # Check if loss printing is enabled
             # Print loss for the current GPU along with the processing time of the batch
-            print(
-                f"GPU {self.gpu_id} | Batch Loss: {loss.item():.4f} | Processing Time: {batch_processing_time:.2f} seconds")
+            print(f"GPU {self.gpu_id} | Batch Loss: {loss.item():.4f}")
         return loss
 
-    def _run_epoch(self, epoch: int):
+    def _run_epoch(self, epoch: int) -> None:
         """
         Runs a single epoch of training.
 
-        Parameters:
-        - epoch: The current epoch number.
+        Args:
+            epoch (int): The current epoch number.
         """
         running_loss = 0.0
         running_size = 0
         self.train_data.sampler.set_epoch(epoch)
-        for batch in self.train_data:
-            if self.task_type == 'supervised':
-                inputs, targets = batch
-            elif self.task_type == 'reconstruction':
-                inputs = batch
-                targets = inputs  # For reconstruction tasks, inputs are used as targets
-            start_time = time()
+        for inputs, targets in self.train_data:
             with torch.set_grad_enabled(True):
-                inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
+                if inputs.numel() == 0: continue
                 loss = self._run_batch(inputs, targets)
-            running_loss += loss.item() * batch.size(0)
-            running_size += batch.size(0)
+            running_loss += loss.item() * len(inputs)
+            running_size += len(inputs)
 
         avg_epoch_loss = running_loss / running_size
+        self.train_list.append(avg_epoch_loss)
         if self.gpu_id == 0:
-            print(f"Epoch {epoch} | Average Loss: {avg_epoch_loss:.4f}")
+            print(f"Epoch {epoch + 1} | Average Loss: {avg_epoch_loss:.4f}")
 
     def _validate(self) -> float:
         """
         Validates the model on the test dataset.
 
         Returns:
-        The average validation loss across all test data.
+            float: The average validation loss across all test data.
         """
         self.model.eval()  # Set the model to evaluation mode
         running_loss = 0.0
         running_size = 0
-
-        for batch in self.test_data:
-            if self.task_type == 'supervised':
-                inputs, targets = batch
-            elif self.task_type == 'reconstruction':
-                inputs = batch
-                targets = inputs
+        metric_sums = {}
+        if self.metrics is not None:
+            metric_sums = {name: 0.0 for name in self.metrics.keys()}
+        for inputs, targets in self.test_data:
             with torch.no_grad():  # No need to track gradients during validation
+                if inputs.numel() == 0: continue
                 inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
-                loss = self._run_batch(inputs, targets)
-            running_loss += loss.item() * batch.size(0)
-            running_size += batch.size(0)
+                outputs = self.model(inputs)
+                loss = self.loss(outputs, targets)
+                running_loss += loss.item() * len(inputs)
+                running_size += len(inputs)
+
+                if self.metrics is not None:
+                    for name, metric in self.metrics.items():
+                        metric_value = metric(outputs, targets).item()
+                        metric_sums[name] += metric_value * len(inputs)
 
         # Convert running loss and size to tensors for all_reduce operation
         running_loss_tensor = torch.tensor([running_loss], device=self.gpu_id)
         running_size_tensor = torch.tensor([running_size], device=self.gpu_id)
+
+        if self.metrics is not None:
+            running_metrics_tensors = {
+                name: torch.tensor([metric_sum], device=self.gpu_id)
+                for name, metric_sum in metric_sums.items()
+            }
+
+        dist.barrier()
 
         # Use dist.all_reduce to sum the losses and sizes from all GPUs
         dist.all_reduce(running_loss_tensor, op=dist.ReduceOp.SUM)
@@ -159,31 +184,45 @@ class Trainer:
         # Compute the average loss across all GPUs and samples
         avg_val_loss = running_loss_tensor.item() / running_size_tensor.item()
 
+        # Compute average metrics across all GPUs
+        if self.metrics is not None:
+            for name, tensor in running_metrics_tensors.items():
+                dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+
+            avg_metrics = {
+                name: (metric_sum.item() / running_size_tensor.item())
+                for name, metric_sum in running_metrics_tensors.items()
+            }
+
+        self.val_list.append(avg_val_loss)
+
         if self.gpu_id == 0:
             print(f"Validation Loss: {avg_val_loss:.4e}")
-
+            if self.metrics is not None:
+                for name, value in avg_metrics.items():
+                    print(f"{name}: {value:.4e}")
         return avg_val_loss
 
-    def _save_snapshot(self, epoch: int):
+    def _save_snapshot(self, epoch: int) -> None:
         """
         Saves a training snapshot.
 
-        Parameters:
-        - epoch: The current epoch number, for tracking in the snapshot.
+        Args:
+            epoch (int): The current epoch number, for tracking in the snapshot.
         """
         snapshot = {
             "MODEL_STATE": self.model.module.state_dict(),
             "EPOCHS_RUN": epoch,
         }
         torch.save(snapshot, self.snapshot_path)
-        print(f"Epoch {epoch} | Training snapshot saved at {self.snapshot_path}")
+        print(f"Epoch {epoch + 1} | Training snapshot saved at {self.snapshot_path}")
 
-    def train(self, max_epochs: int):
+    def train(self, max_epochs: int) -> None:
         """
         The main training loop.
 
-        Parameters:
-        - max_epochs: The maximum number of epochs to train for.
+        Args:
+            max_epochs (int): The maximum number of epochs to train for.
         """
         for epoch in range(self.epochs_run, max_epochs):
             self._run_epoch(epoch)
@@ -210,15 +249,18 @@ class Trainer:
                         print('Stopping early due to no improvement.')
                     break
 
+        if self.create_loss_plot:
+            plot_loss(self.train_list, self.val_list)
+
 
 @record
-def dist_train(trainer: Trainer, total_epochs: int):
+def dist_train(trainer: Trainer, total_epochs: int) -> None:
     """
     A utility function to manage the distributed training process.
 
-    Parameters:
-    - trainer: The Trainer instance to conduct the training.
-    - total_epochs: The total number of epochs to train the model.
+    Args:
+        trainer (Trainer): The Trainer instance to conduct the training.
+        total_epochs (int): The total number of epochs to train the model.
     """
     trainer.train(total_epochs)
     destroy_process_group()
