@@ -256,7 +256,7 @@ def assign_dims(data: Dict[str, da.Array|xr.DataArray], dims: Tuple) -> Dict[str
 
 def get_dim_range(cube: xr.DataArray, dim: str):
     """
-    Helper function to get dimension ranges.
+    Calculates the dimension range of an xr.DataArray.
 
     Args:
         cube (xr.DataArray): The input data cube.

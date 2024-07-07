@@ -25,7 +25,7 @@ So far only Support Vector Regression is tested but other ML algorithms, hyperpa
 
 Example
 ```
-    Gapfiller(ds_name='GermanyNB123', learning_function="SVR", hyperparameters="RandomGridSearch", predictor="lccs_class").gapfill()
+    Gapfiller(ds_name='GermanyNB123', hyperparameters="RandomGridSearch", predictor="lccs_class").gapfill()
 ```
 """
 
