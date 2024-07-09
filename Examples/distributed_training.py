@@ -8,6 +8,19 @@ from ml4xcube.cube_utilities import assign_dims
 from ml4xcube.datasets.pytorch import LargeScaleXrDataset, prepare_dataloader
 from ml4xcube.training.pytorch_distributed import ddp_init, dist_train, Trainer
 
+"""
+Before performing distributed machine learning, run the distributed_datasets_creation.py in order to create the training and the test set.
+
+To utilize ml4xcube for distributed training, use the following command with torchrun to initiate the process:
+
+torchrun --standalone --nproc_per_node=<number_of_processes> distributed_training.py <epochs> --save every <epochs number> --batch_size <batch_size>
+
+Replace `<number_of_processes>` with the number of processes you wish to run per node,
+`<epochs>` with the total number of training epochs,
+<epochs number> with the recurring number of epochs to save the current snapshot of the model weigths,
+and <batch_size> with the number of data samples each node processes
+"""
+
 
 def map_function(batch):
     """

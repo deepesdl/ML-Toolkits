@@ -8,6 +8,8 @@ from ml4xcube.preprocessing import get_statistics, standardize
 from ml4xcube.datasets.multiproc_sampler import MultiProcSampler
 
 
+"""Before performing distributed machine learning, run this script in order to create the training and the test set."""
+
 # Initialize global variables to None
 at_stat = None
 lst_stat = None
