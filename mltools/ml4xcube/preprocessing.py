@@ -1,6 +1,8 @@
 import numpy as np
 import xarray as xr
+import dask.array as da
 from typing import Dict, List
+from ml4xcube.cube_utilities import get_chunk_sizes
 
 
 def apply_filter(ds: Dict[str, np.ndarray], filter_var: str, drop_sample: bool = False) -> Dict[str, np.ndarray]:
@@ -44,7 +46,7 @@ def apply_filter(ds: Dict[str, np.ndarray], filter_var: str, drop_sample: bool =
     return ds
 
 
-def drop_nan_values(ds: Dict[str, np.ndarray], vars: list, filter_var: str = None) -> Dict[str, np.ndarray]:
+def drop_nan_values(ds: Dict[str, np.ndarray], vars: List[str], filter_var: str = None) -> Dict[str, np.ndarray]:
     """
     Drop NaN values from the dataset. If any value in a subarray is NaN, drop the entire subarray.
     For lists of points, drop single NaN values. If filter_var is defined, it will use this mask
@@ -52,7 +54,7 @@ def drop_nan_values(ds: Dict[str, np.ndarray], vars: list, filter_var: str = Non
 
     Args:
         ds (Dict[str, np.ndarray]): The dataset to filter. It should be a dictionary where keys are variable names and values are numpy arrays.
-        vars (list): The variables to check for NaN values.
+        vars (List[str]): The variables to check for NaN values.
         filter_var (str): The name of the mask variable in the dataset. If None, drop the entire subarray based on NaN values alone.
 
     Returns:
@@ -101,16 +103,17 @@ def drop_nan_values(ds: Dict[str, np.ndarray], vars: list, filter_var: str = Non
     return ds
 
 
-def fill_masked_data(ds: Dict[str, np.ndarray], vars: List[str], method: str = 'mean', const: float | str | bool = None) -> Dict[str, np.ndarray]:
+def fill_nan_values(ds: Dict[str, np.ndarray], vars: List[str], method: str = 'mean', const: float | str | bool = None) -> Dict[str, np.ndarray]:
     """
     Fill NaN values in the dataset. If method is 'mean', fill NaNs with the mean value of the non-NaN values.
+    If method is 'sample_mean', fill NaNs with the sample mean value.
     If method is 'noise', fill NaNs with random noise within the range of the non-NaN values.
     If method is 'constant', fill NaNs with the specified constant value.
 
     Args:
         ds (Dict[str, np.ndarray]): The dataset to fill. It should be a dictionary where keys are variable names and values are numpy arrays.
         vars (List[str]): The variables to fill NaN values for.
-        method (str): The method to use for filling NaN values. Options are 'mean', 'noise', or 'constant'.
+        method (str): The method to use for filling NaN values. Options are 'mean', 'sample_mean', 'noise', or 'constant'.
         constant_value (float | str | bool): The constant value to use for filling NaN values when method is 'constant'.
 
     Returns:
@@ -122,6 +125,9 @@ def fill_masked_data(ds: Dict[str, np.ndarray], vars: List[str], method: str = '
             if np.isnan(value).any():
                 if method == 'mean':
                     mean_value = np.nanmean(value)
+                    ds[var] = np.where(np.isnan(value), mean_value, value)
+                elif method == 'sample_mean':
+                    mean_value = np.nanmean(value, axis=0, keepdims=True)
                     ds[var] = np.where(np.isnan(value), mean_value, value)
                 elif method == 'noise':
                     non_nan_values = value[~np.isnan(value)]
@@ -208,3 +214,50 @@ def standardize(x: np.ndarray, xmean: float, xstd: float) -> np.ndarray:
         np.ndarray: The standardized array.
     """
     return (x - xmean) / xstd
+
+
+def assign_mask(ds: xr.Dataset, mask: da.Array, mask_name: str, stack_dim: str = None) -> xr.Dataset:
+    """
+    Assign a mask to a dataset, expanding it along a specified dimension if provided.
+
+    Args:
+        ds (xr.Dataset): The dataset to which the mask will be assigned.
+        mask (da.Array): The mask array to be assigned to the dataset.
+        mask_name (str): The name to be used for the mask variable in the dataset.
+        stack_dim (str, optional): The dimension along which to expand the mask. If None, the mask is not expanded. Default is None.
+
+    Returns:
+        xr.Dataset: The dataset with the mask assigned.
+
+    Raises:
+        ValueError: If the specified stack dimension is not present in the dataset dimensions.
+
+    Notes:
+        - The function validates that the specified stack dimension is present in the dataset.
+        - If a stack dimension is specified, the mask is expanded along this dimension.
+        - The mask is rechunked to align with the dataset's chunk sizes for the common dimensions.
+    """
+    # Validate that the stack_dim is a dimension in the dataset
+    if stack_dim and stack_dim not in ds.dims:
+        raise ValueError(f"The specified stack dimension '{stack_dim}' is not present in the dataset dimensions.")
+
+    cube_dims = list(ds.dims)
+
+    # If a stacking dimension is specified and it exists in the dataset
+    if stack_dim:
+        # Calculate the axis index for the specified stack dimension
+        stack_dim_index = cube_dims.index(stack_dim)
+
+        # Expand the mask across the specified dimension
+        mask = da.stack([mask for _ in range(ds.sizes[stack_dim])], axis=stack_dim_index)
+
+    # Rechunk the mask to align with the dataset's chunk sizes for the common dimensions
+    chunk_sizes=([v for k, v in get_chunk_sizes(ds)])
+    mask = mask.rechunk(chunks=chunk_sizes)
+
+    # Assign the mask to the dataset using the provided mask name
+    xds = ds.assign({
+        mask_name: (cube_dims, mask)
+    })
+
+    return xds
