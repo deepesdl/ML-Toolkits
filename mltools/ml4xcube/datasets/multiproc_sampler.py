@@ -1,3 +1,4 @@
+import os
 import zarr
 import random
 import numpy as np
@@ -7,7 +8,7 @@ from multiprocessing import Pool
 from typing import Tuple, Optional, Dict, List, Callable
 from ml4xcube.cube_utilities import split_chunk, assign_dims
 from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks
-from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_masked_data
+from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_nan_values
 
 
 def process_chunk(chunk: Dict[str, np.ndarray], use_filter: bool, drop_sample: bool, filter_var: Optional[str],
@@ -53,7 +54,7 @@ def process_chunk(chunk: Dict[str, np.ndarray], use_filter: bool, drop_sample: b
     if valid_chunk:
         vars = [var for var in cft.keys() if var != 'split' and var != filter_var]
         if fill_method is not None:
-            cft = fill_masked_data(cft, vars, fill_method, const)
+            cft = fill_nan_values(cft, vars, fill_method, const)
         if callback_fn:
             cft = callback_fn(cft)
     return cft, valid_chunk
@@ -120,7 +121,7 @@ class MultiProcSampler():
                  data_split: float = 0.8, chunk_batch: int = None, callback_fn: Callable = None,
                  block_size: List[Tuple[str, int]] = None,
                  sample_size: List[Tuple[str, int]] = None,
-                 overlap: List[Tuple[str, int]] = None):
+                 overlap: List[Tuple[str, float]] = None):
         """
         Initialize the MultiProcSampler with the given dataset and parameters.
 
@@ -135,16 +136,16 @@ class MultiProcSampler():
             fill_method (str): Method to fill masked data, if any.
             const (Optional[float]): Constant value to use for filling masked data, if needed.
             filter_var (Optional[str]): The variable to use for filtering.
-            chunk_size (Tuple[int]): The size of chunks to process.
+            chunk_size (Tuple[int]): The size of chunks in the generated training and testing data.
             train_store (zarr.Group): Zarr store for training data.
             test_store (zarr.Group): Zarr store for testing data.
             array_dims (Tuple[str, Optional[str], Optional[str]]): Tuple specifying the dimensions of the arrays.
             data_split (float): The fraction of data to use for training.
             chunk_batch (int): Number of chunks to process in each batch.
             callback_fn (function): Optional callback function to apply to each chunk after preprocessing.
-            block_size (List[Tuple[str, int]]): Optional list specifying the block sizes for each dimension.
+            block_size (List[Tuple[str, int]]): Optional list specifying the block sizes for a chunk to be processed. If None the chunk size of ds will be utilized.
             sample_size (List[Tuple[str, int]]): List of tuples specifying the dimensions and their respective sizes.
-            overlap (List[Tuple[str, int]]): List of tuples specifying the dimensions and their respective overlap fractions.
+            overlap (List[Tuple[str, float]]): List of tuples specifying the dimensions and their respective overlap fractions.
             total_chunks (int): Total number of chunks in the dataset.
             num_chunks (int): Number of chunks to process.
         """
@@ -157,8 +158,8 @@ class MultiProcSampler():
         self.const = const
         self.filter_var = filter_var
         self.chunk_size = chunk_size
-        self.train_store = zarr.open(train_cube)
-        self.test_store = zarr.open(test_cube)
+        self.train_cube = train_cube
+        self.test_cube = test_cube
         self.array_dims = array_dims
         self.data_split = data_split
         self.chunk_batch = chunk_batch if chunk_batch is not None else self.nproc
@@ -191,30 +192,41 @@ class MultiProcSampler():
             if train_data is None and test_data is None:
                 continue
 
+            train_data_arrays = {}
+            test_data_arrays = {}
+
             for var in self.ds.keys():
-                if var == 'split': continue
+                if var == 'split' or var == self.filter_var: continue
 
                 print(f"Processing variable: {var}")
                 print(f"Train data samples: {train_data[var].shape[0]}")
                 print(f"Test data samples: {test_data[var].shape[0]}")
 
-                append_dim = None
-                if self.sample_size is not None: append_dim = 0
                 if train_data[var].shape[0] > 0:
-                    train_var_data = train_data[var]
-                    if var not in self.train_store:
-                        self.train_store.create_dataset(var, data=train_var_data, shape=train_var_data.shape,
-                                                        dtype=train_var_data.dtype, chunks=self.chunk_size, append_dim=append_dim)
-                    else:
-                        self.train_store[var].append(train_var_data)
+                    train_var_data = da.from_array(train_data[var], chunks=self.chunk_size)
+                    # Assign dimensions to data arrays
+                    train_data_arrays[var] = (self.array_dims, train_var_data)
 
                 if test_data[var].shape[0] > 0:
-                    test_var_data = test_data[var]
-                    if var not in self.test_store:
-                        self.test_store.create_dataset(var, data=test_var_data, shape=test_var_data.shape,
-                                                       dtype=test_var_data.dtype, chunks=self.chunk_size, append_dim=append_dim)
-                    else:
-                        self.test_store[var].append(test_var_data)
+                    test_var_data = da.from_array(test_data[var], chunks=self.chunk_size)
+                    # Assign dimensions to data arrays
+                    test_data_arrays[var] = (self.array_dims, test_var_data)
+
+            if train_data_arrays:
+                train_ds = xr.Dataset(train_data_arrays)
+                # Append data to the Zarr store with dimension names
+                if not os.path.exists(self.train_cube):
+                    train_ds.to_zarr(self.train_cube)
+                else:
+                    train_ds.to_zarr(self.train_cube, mode='a', append_dim=self.array_dims[0])
+
+            if test_data_arrays:
+                test_ds = xr.Dataset(test_data_arrays)
+                # Append data to the Zarr store with dimension names
+                if not os.path.exists(self.test_cube):
+                    test_ds.to_zarr(self.test_cube)
+                else:
+                    test_ds.to_zarr(self.test_cube, mode='a', append_dim=self.array_dims[0])
 
     def create_cubes(self) -> None:
         """
@@ -247,15 +259,6 @@ class MultiProcSampler():
         Returns:
             Tuple[xr.Dataset, xr.Dataset]: The training and testing xarray Datasets.
         """
-        # Convert Zarr stores to Dask arrays and then to xarray Datasets
-        self.train_data = {var: da.from_zarr(self.train_store[var]) for var in self.train_store.array_keys()}
-        self.test_data = {var: da.from_zarr(self.test_store[var]) for var in self.test_store.array_keys()}
-
-        # Assign dimensions using the assign_dims function
-        self.train_data = assign_dims(self.train_data, self.array_dims)
-        self.test_data = assign_dims(self.test_data, self.array_dims)
-
-        train_ds = xr.Dataset(self.train_data)
-        test_ds = xr.Dataset(self.test_data)
-
+        train_ds = xr.open_zarr(self.train_cube)
+        test_ds = xr.open_zarr(self.test_cube)
         return train_ds, test_ds
