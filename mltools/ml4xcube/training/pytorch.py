@@ -10,18 +10,10 @@ class Trainer:
     A trainer class for training PyTorch models on single or no GPU systems.
     """
     def __init__(
-            self,
-            model: torch.nn.Module,
-            train_data: DataLoader,
-            test_data: DataLoader,
-            optimizer: torch.optim.Optimizer,
-            best_model_path: str,
-            early_stopping: bool = True,
-            patience: int = 10,
-            loss: Callable = None,
-            metrics: Dict[str, Callable] = None,
-            epochs: int = 10,
-            mlflow_run=None,
+            self, model: torch.nn.Module, train_data: DataLoader, test_data: DataLoader,
+            optimizer: torch.optim.Optimizer, best_model_path: str,
+            early_stopping: bool = True, patience: int = 10, loss: Callable = None,
+            metrics: Dict[str, Callable] = None, epochs: int = 10, mlflow_run=None,
             device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
             create_loss_plot: bool = False,
     ):

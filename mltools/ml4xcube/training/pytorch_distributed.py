@@ -27,20 +27,11 @@ class Trainer:
     and periodic snapshot saving.
     """
     def __init__(
-            self,
-            model: torch.nn.Module,
-            train_data: DataLoader,
-            test_data: DataLoader,
-            optimizer: torch.optim.Optimizer,
-            save_every: int,
-            best_model_path: str,
-            snapshot_path: str = None,
-            early_stopping: bool = True,
-            patience: int = 10,
-            loss = None,
-            metrics: Dict[str, Callable] = None,
-            validate_parallelism: bool = False,  # New parameter to control loss printing
-            create_loss_plot: bool = False
+            self, model: torch.nn.Module, train_data: DataLoader, test_data: DataLoader,
+            optimizer: torch.optim.Optimizer, save_every: int, best_model_path: str,
+            snapshot_path: str = None, early_stopping: bool = True, patience: int = 10,
+            loss: Callable = None, metrics: Dict[str, Callable] = None,
+            validate_parallelism: bool = False, create_loss_plot: bool = False
     ):
         """
         Initialize the Trainer for distributed training.
@@ -56,8 +47,10 @@ class Trainer:
             early_stopping (bool): Enable or disable early stopping. Defaults to True.
             patience (int): Number of epochs to wait for improvement before stopping early.
             loss (Callable): Loss function.
-            metrics (Dict[str, Callable]): Dictionary of metrics to evaluate, with metric names as keys and metric functions as values.
-            validate_parallelism (bool): Whether to print loss for each GPU.
+            metrics (Dict[str, Callable]): Dictionary of metrics to evaluate during validation,
+                with metric names as keys and metric functions as values.
+            validate_parallelism (bool): If set to True, prints loss information from each GPU,
+                useful for debugging and performance tuning.
             create_loss_plot (bool): Whether to create a plot of training and validation loss.
         """
         self.gpu_id = int(os.environ["LOCAL_RANK"])  # GPU ID for the current process

@@ -2,25 +2,16 @@ import os
 import tensorflow as tf
 from ml4xcube.training.train_plots import plot_loss
 
+
 class Trainer:
 
     """
     A trainer class for training TensorFlow models on single or no GPU systems.
     """
     def __init__(
-            self,
-            model: tf.keras.Model,
-            train_data: tf.data.Dataset,
-            test_data: tf.data.Dataset,
-            best_model_path: str,
-            early_stopping: bool = True,
-            patience: int = 10,
-            tf_log_dir: str = './logs',
-            mlflow_run = None,
-            epochs: int = 100,
-            train_epoch_steps: int = None,
-            val_epoch_steps: int = None,
-            create_loss_plot: bool = False,
+            self, model: tf.keras.Model, train_data: tf.data.Dataset, test_data: tf.data.Dataset, best_model_path: str,
+            early_stopping: bool = True, patience: int = 10, tf_log_dir: str = './logs', mlflow_run = None,
+            epochs: int = 100, train_epoch_steps: int = None, val_epoch_steps: int = None, create_loss_plot: bool = False,
     ):
         """
         Initialize a Trainer object.
