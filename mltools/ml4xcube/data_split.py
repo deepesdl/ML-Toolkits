@@ -7,8 +7,6 @@ from ml4xcube.cube_utilities import get_chunk_sizes
 warnings.filterwarnings('ignore')
 
 
-# random sampling
-
 def assign_rand_split(ds: xr.Dataset, split: float = 0.8) -> xr.Dataset:
     """
     Assign random split using random sampling.
@@ -23,52 +21,18 @@ def assign_rand_split(ds: xr.Dataset, split: float = 0.8) -> xr.Dataset:
     seed = 32  # Consistent seed for reproducibility
     random.seed(seed)
 
-    # Ensure the random array matches the dimensions and chunk sizes of the input dataset
-    dimensions = list(ds.sizes)  # Gets the dimensions from the dataset
-    chunk_sizes = {dim: ds.chunks[dim] for dim in ds.sizes}  # Assumes the dataset is chunked
+    # Fetch the chunk sizes using a predefined method that returns a list of tuples (dimension, chunk size)
+    chunk_sizes = dict(get_chunk_sizes(ds))  # Assuming this returns [(dim, size), ...]
 
-    # Generate a random array with the same shape and chunking as the dataset
-    random_split = da.random.random(size=tuple(ds.sizes[dim] for dim in dimensions), chunks=tuple(chunk_sizes[dim] for dim in dimensions)) < split
+    # Create a Dask array that generates random numbers for each data point, following the dataset's chunking structure
+    random_split = da.random.random(size=tuple(ds.dims[dim] for dim in ds.dims),
+                                    chunks=tuple(chunk_sizes[dim] for dim in ds.dims if dim in chunk_sizes)) < split
 
-    # Convert boolean values to floats
+    # Convert boolean values to floats (1.0 for True, 0.0 for False)
     random_split = random_split.astype(float)
 
-    # Assign the new data array to the dataset under the variable name 'split'
-    return ds.assign(split=(dimensions, random_split))
-      
-
-# block sampling
-
-def cantor_pairing(x: int, y: int) -> int:
-    """
-    Unique assignment of a pair (x,y) to a natural number using the Cantor pairing function.
-
-    Args:
-        x (int): The first integer.
-        y (int): The second integer.
-
-    Returns:
-        int: The unique natural number assigned to the pair (x, y).
-    """
-    return int((x + y) * (x + y + 1) / 2 + y)
-
-
-# for random seed generation
-def cantor_tuple(index_list: List[int]) -> int:
-    """
-    Unique assignment of a pair (x,y) to a natural number using the Cantor pairing function.
-
-    Args:
-        x (int): The first integer.
-        y (int): The second integer.
-
-    Returns:
-        int: The unique natural number assigned to the pair (x, y).
-    """
-    t = index_list[0]
-    for x in index_list[1:]:
-        t = cantor_pairing(t, x)
-    return t
+    # Assign this array to the dataset with the variable name 'split'
+    return ds.assign(split=(list(ds.dims), random_split))
 
 
 def assign_block_split(ds: xr.Dataset, block_size: List[Tuple[str, int]] = None, split: float = 0.8) -> xr.Dataset:
@@ -90,10 +54,7 @@ def assign_block_split(ds: xr.Dataset, block_size: List[Tuple[str, int]] = None,
     if block_size is None:
         block_size = get_chunk_sizes(ds)
 
-    def role_dice(x, block_id=None):
-        if block_id is not None:
-            seed=cantor_tuple(block_id)
-            random.seed(seed)
+    def role_dice(x):
         return x + (random.random() < split)
 
     def block_rand(x):
