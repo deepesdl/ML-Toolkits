@@ -1,11 +1,8 @@
-import zarr
 import torch
 import argparse
 import numpy as np
 import xarray as xr
-import dask.array as da
-from ml4xcube.cube_utilities import assign_dims
-from ml4xcube.datasets.pytorch import LargeScaleXrDataset, prepare_dataloader
+from ml4xcube.datasets.pytorch import PTXrDataset, prepare_dataloader
 from ml4xcube.training.pytorch_distributed import ddp_init, dist_train, Trainer
 
 """
@@ -28,50 +25,31 @@ def map_function(batch):
     X corresponds to 'air_temperature_2m' and y corresponds to 'land_surface_temperature'.
     """
 
-    if len(batch) == 0:
-        X = torch.empty((1, 0))
-        y = torch.empty((1, 0))
-    else:
-        # Extract the arrays from the list of dictionaries
-        air_temperature_2m_list       = []
-        land_surface_temperature_list = []
+    #X = np.stack([d['air_temperature_2m'] for d in batch], axis=0).reshape(-1, 1)
+    #y = np.stack([d['land_surface_temperature'] for d in batch], axis=0).reshape(-1, 1)
 
-        for d in batch:
-            if 'air_temperature_2m' in d and 'land_surface_temperature' in d:
-                air_temperature_2m_list.append(d['air_temperature_2m'])
-                land_surface_temperature_list.append(d['land_surface_temperature'])
-            else:
-                print("Error: Could not find both required arrays in the list of dictionaries.")
-                return torch.empty((1, 0)), torch.empty((1, 0))
+    # Extract the arrays from the list of dictionaries
+    air_temperature_2m_list       = []
+    land_surface_temperature_list = []
 
-        # Stack the arrays along the first dimension (assuming they are 1D arrays)
-        X = np.stack(air_temperature_2m_list, axis=0)
-        y = np.stack(land_surface_temperature_list, axis=0)
+    for d in batch:
+        air_temperature_2m_list.append(d['air_temperature_2m'])
+        land_surface_temperature_list.append(d['land_surface_temperature'])
 
-        X = X.reshape(-1, 1)  # Making it [num_samples, 1]
-        y = y.reshape(-1, 1)
+    # Stack the arrays along the first dimension (assuming they are 1D arrays)
+    X = np.stack(air_temperature_2m_list, axis=0).reshape(-1, 1)
+    y = np.stack(land_surface_temperature_list, axis=0).reshape(-1, 1)
 
     return torch.tensor(X), torch.tensor(y)
 
 
 def load_train_objs():
-    train_store = zarr.open('train_cube.zarr')
-    test_store = zarr.open('test_cube.zarr')
-
-    # Convert Zarr stores to Dask arrays and then to xarray Datasets
-    train_data = {var: da.from_zarr(train_store[var]) for var in train_store.array_keys()}
-    test_data  = {var: da.from_zarr(test_store[var]) for var in test_store.array_keys()}
-
-    # Assign dimensions using the assign_dims function
-    train_data = assign_dims(train_data, ('samples', ))
-    test_data  = assign_dims(test_data, ('samples', ))
-
-    train_set = xr.Dataset(train_data)
-    test_set  = xr.Dataset(test_data)
+    train_set = xr.open_zarr('train_cube.zarr')
+    test_set = xr.open_zarr('test_cube.zarr')
 
     # Create PyTorch data sets
-    train_ds = LargeScaleXrDataset(train_set)
-    test_ds  = LargeScaleXrDataset(test_set)
+    train_ds = PTXrDataset(train_set)
+    test_ds  = PTXrDataset(test_set)
 
     # Initialize model and optimizer
     model     = torch.nn.Linear(in_features=1, out_features=1, bias=True)
@@ -79,6 +57,7 @@ def load_train_objs():
     loss      = torch.nn.MSELoss(reduction='mean')
 
     return train_ds, test_ds, model, optimizer, loss
+
 
 def main(save_every: int, total_epochs: int, batch_size: int, snapshot_path: str = "snapshot.pt", best_model_path: str = 'Best_Model.pt'):
     """Main function to run distributed training process."""
