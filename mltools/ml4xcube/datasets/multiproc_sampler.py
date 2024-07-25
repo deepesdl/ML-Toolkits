@@ -113,7 +113,7 @@ def worker_preprocess_chunk(args: Tuple) -> Tuple[Dict[str, np.ndarray], Dict[st
 
 class MultiProcSampler():
     def __init__(self, ds: xr.Dataset, rand_chunk: bool = False, drop_nan_masked: bool = False,
-                 data_fraq: float = 1.0, nproc: int = 4, use_filter: bool = True,
+                 data_fraq: float = 1.0, nproc: int = 4, apply_mask: bool = True,
                  drop_sample: bool = True, fill_method: str = None, const: float = None,
                  filter_var: str = 'land_mask', chunk_size: Tuple[int] = None,
                  train_cube: str = 'train_cube.zarr', test_cube: str = 'test_cube.zarr',
@@ -131,7 +131,7 @@ class MultiProcSampler():
             drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
             data_fraq (float): The fraction of data to process.
             nproc (int): Number of processes to use for parallel processing.
-            use_filter (bool): If true, apply the filter based on the specified filter_var.
+            apply_mask (bool): If true, apply the filter based on the specified filter_var.
             drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
             fill_method (str): Method to fill masked data, if any.
             const (Optional[float]): Constant value to use for filling masked data, if needed.
@@ -152,7 +152,7 @@ class MultiProcSampler():
         self.ds = ds
         self.rand_chunk = rand_chunk
         self.drop_nan_masked = drop_nan_masked
-        self.use_filter = use_filter
+        self.apply_mask = apply_mask
         self.drop_sample = drop_sample
         self.fill_method = fill_method
         self.const = const
@@ -247,7 +247,7 @@ class MultiProcSampler():
                 batch_indices = chunk_indices[i:i + self.chunk_batch]
                 batch_chunks = [get_chunk_by_index(self.ds, idx, block_size=self.block_size) for idx in batch_indices]
                 processed_chunks = pool.map(worker_preprocess_chunk, [
-                    (chunk, self.use_filter, self.drop_sample, self.sample_size, self.overlap, self.filter_var, self.callback_fn, self.data_split, self.drop_nan_masked, self.fill_method, self.const)
+                    (chunk, self.apply_mask, self.drop_sample, self.sample_size, self.overlap, self.filter_var, self.callback_fn, self.data_split, self.drop_nan_masked, self.fill_method, self.const)
                     for chunk in batch_chunks
                 ])
                 self.store_chunks(processed_chunks)

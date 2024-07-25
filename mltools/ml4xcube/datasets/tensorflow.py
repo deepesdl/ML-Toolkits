@@ -10,7 +10,7 @@ from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_nan_value
 
 class TFXrDataset:
     def __init__(self, ds: xr.Dataset, rand_chunk: bool = True, drop_nan: bool = True,
-                 chunk_indices: list = None, drop_nan_masked: bool = False, use_filter: bool = True,
+                 chunk_indices: list = None, drop_nan_masked: bool = False, apply_mask: bool = True,
                  drop_sample: bool = False, fill_method: str = None, const: float = None,
                  filter_var: str = 'land_mask', num_chunks: int = None, callback_fn = None,
                  block_size: List[Tuple[str, int]] = None,
@@ -24,7 +24,7 @@ class TFXrDataset:
             rand_chunk (bool): Whether to select chunks randomly.
             drop_nan (bool): Whether to drop NaN values.
             drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
-            use_filter (bool): If true, apply the filter based on the specified filter_var.
+            apply_mask (bool): If true, apply the filter based on the specified filter_var.
             drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
             fill_method (str): Method to fill masked data, if any.
             const (float): Constant value to use for filling masked data, if needed.
@@ -41,7 +41,7 @@ class TFXrDataset:
         self.rand_chunk = rand_chunk
         self.drop_nan = drop_nan
         self.drop_nan_masked = drop_nan_masked
-        self.use_filter = use_filter
+        self.apply_mask = apply_mask
         self.drop_sample = drop_sample
         self.fill_method = fill_method
         self.const = const
@@ -79,7 +79,7 @@ class TFXrDataset:
             chunk = get_chunk_by_index(self.ds, idx)
             cf = split_chunk(chunk, self.sample_size, overlap=self.overlap)
 
-            if self.use_filter:
+            if self.apply_mask:
                 cft = apply_filter(cf, self.filter_var, self.drop_sample)
             else:
                 cft = cf
