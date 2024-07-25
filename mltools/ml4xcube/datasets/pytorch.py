@@ -6,17 +6,17 @@ from ml4xcube.cube_utilities import split_chunk
 from torch.utils.data import Dataset, DataLoader
 from typing import Tuple, List, Callable, Dict
 from ml4xcube.cube_utilities import calculate_total_chunks, get_chunk_by_index
-from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_masked_data
+from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_nan_values
 
 
-class LargeScaleXrDataset(Dataset):
-    def __init__(self, xr_dataset: xr.Dataset, rand_chunk: bool = True, drop_nan: bool = True,
+class PTXrDataset(Dataset):
+    def __init__(self, ds: xr.Dataset, rand_chunk: bool = True, drop_nan: bool = True,
                  chunk_indices: List[int] = None, drop_nan_masked: bool = False, use_filter: bool = True,
                  drop_sample: bool = False, fill_method: str = None, const: float = None,
                  filter_var: str = 'land_mask', num_chunks: int = None,
                  block_sizes: List[Tuple[str, int]] = None,
                  sample_size: List[Tuple[str, int]] = None,
-                 overlap: List[Tuple[str, int]] = None):
+                 overlap: List[Tuple[str, float]] = None):
         """
         Initialize the dataset to manage large datasets efficiently.
 
@@ -33,11 +33,11 @@ class LargeScaleXrDataset(Dataset):
             num_chunks (int): Number of chunks to process dynamically.
             block_sizes (List[Tuple[str, int]]): Block sizes for considered blocks (of (sub-)chunks).
             sample_size (List[Tuple[str, int]]): Sample size for chunk splitting.
-            overlap (List[Tuple[str, int]]): Overlap for overlapping samples due to chunk splitting.
+            overlap (List[Tuple[str, float]]): Percentage for overlapping samples due to chunk splitting.
             total_chunks (int): Total number of chunks in the dataset.
             chunk_indices (List[int]): List of indices of chunks to load.
         """
-        self.ds = xr_dataset
+        self.ds = ds
         self.rand_chunk = rand_chunk
         self.drop_nan = drop_nan
         self.drop_nan_masked = drop_nan_masked
@@ -51,7 +51,7 @@ class LargeScaleXrDataset(Dataset):
         self.sample_size = sample_size
         self.overlap = overlap
 
-        self.total_chunks = int(calculate_total_chunks(xr_dataset, self.block_sizes))
+        self.total_chunks = int(calculate_total_chunks(ds, self.block_sizes))
         if not chunk_indices is None:
             self.chunk_indices = chunk_indices
         elif num_chunks is not None and self.total_chunks >= num_chunks:
@@ -102,7 +102,7 @@ class LargeScaleXrDataset(Dataset):
         if valid_chunk:
             vars = [var for var in cft.keys() if var != 'split' and var != self.filter_var]
             if self.fill_method is not None:
-                cft = fill_masked_data(cft, vars, self.fill_method, self.const)
+                cft = fill_nan_values(cft, vars, self.fill_method, self.const)
 
         return cft  # Return the processed chunk
 
