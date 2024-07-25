@@ -254,7 +254,7 @@ def assign_dims(data: Dict[str, da.Array|xr.DataArray], dims: Tuple) -> Dict[str
     return result
 
 
-def get_dim_range(cube: xr.DataArray, dim: str):
+def get_dim_range(cube: xr.DataArray, dim: str) -> Tuple[float, float] | Tuple[str, str]:
     """
     Calculates the dimension range of an xr.DataArray.
 
@@ -263,7 +263,7 @@ def get_dim_range(cube: xr.DataArray, dim: str):
         dim (str): The dimension name.
 
     Returns:
-        tuple: The minimum and maximum values of the dimension.
+        Tuple[float, float]: The minimum and maximum values of the dimension.
     """
     try:
         if np.issubdtype(cube[dim].dtype, np.datetime64):
