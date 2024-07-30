@@ -3,12 +3,13 @@ import xarray as xr
 import dask.array as da
 from global_land_mask import globe
 from xcube.core.store import new_data_store
-from ml4xcube.cube_utilities import get_chunk_sizes
-from ml4xcube.preprocessing import get_statistics, standardize
+from ml4xcube.data_split import assign_block_split
 from ml4xcube.datasets.multiproc_sampler import MultiProcSampler
+from ml4xcube.preprocessing import get_statistics, standardize, assign_mask
 
 
 """Before performing distributed machine learning, run this script in order to create the training and the test set."""
+
 
 # Initialize global variables to None
 at_stat = None
@@ -54,13 +55,16 @@ def prepare_dataset_creation() -> xr.Dataset:
     print(f'air_temperature_2m:       {at_stat}')
     print(f'land_surface_temperature: {lst_stat}')
 
-    # Create a land mask
+    # Create a land mask and assign land mask
     lon_grid, lat_grid = np.meshgrid(ds.lon, ds.lat)
-    lm0                = da.from_array(globe.is_land(lat_grid, lon_grid))
-    lm                 = da.stack([lm0 for _ in range(ds.dims['time'])], axis=0)
+    land_mask          = da.from_array(globe.is_land(lat_grid, lon_grid))
+    ds                 = assign_mask(ds, land_mask, 'land_mask', 'time')
 
-    # Assign land mask to the dataset
-    ds = ds.assign(land_mask=(['time', 'lat', 'lon'], lm.rechunk(chunks=([v for _, v in get_chunk_sizes(ds)]))))
+    xds = assign_block_split(
+        ds=ds,
+        block_size=[("time", 12), ("lat", 135), ("lon", 135)],
+        split=0.7
+    )
     return ds
 
 
@@ -74,8 +78,8 @@ def create_datasets(ds: xr.Dataset) -> None:
     # Preprocess data and split into training and testing sets
     train_set, test_set = MultiProcSampler(
         ds          = ds,
-        train_cube  = 'train_cube_std.zarr',
-        test_cube   = 'test_cube_std.zarr',
+        train_cube  = 'train_cube.zarr',
+        test_cube   = 'test_cube.zarr',
         nproc       = 5,
         chunk_batch = 10,
         data_fraq   = 0.01,
