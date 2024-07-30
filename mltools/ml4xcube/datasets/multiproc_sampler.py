@@ -79,8 +79,8 @@ def worker_preprocess_chunk(args: Tuple) -> Tuple[Dict[str, np.ndarray], Dict[st
     if 'split' in chunk:
         train_mask, test_mask = chunk['split'] == True, chunk['split'] == False
 
-        train_cf = {var: np.ma.masked_where(~train_mask, chunk[var]) for var in chunk if var != 'split'}
-        test_cf = {var: np.ma.masked_where(~test_mask, chunk[var]) for var in chunk if var != 'split'}
+        train_cf = {var: np.ma.masked_where(~train_mask, chunk[var]).filled(np.nan) for var in chunk if var != 'split'}
+        test_cf = {var: np.ma.masked_where(~test_mask, chunk[var]).filled(np.nan) for var in chunk if var != 'split'}
 
         train_cft, test_cft = None, None
         valid_train, valid_test = False, False
@@ -115,9 +115,9 @@ class MultiProcSampler():
     def __init__(self, ds: xr.Dataset, rand_chunk: bool = False, drop_nan_masked: bool = False,
                  data_fraq: float = 1.0, nproc: int = 4, apply_mask: bool = True,
                  drop_sample: bool = True, fill_method: str = None, const: float = None,
-                 filter_var: str = 'land_mask', chunk_size: Tuple[int] = None,
+                 filter_var: str = 'land_mask', chunk_size: Tuple[int, Optional[int], Optional[int], Optional[int]] = None,
                  train_cube: str = 'train_cube.zarr', test_cube: str = 'test_cube.zarr',
-                 array_dims: Tuple[str, Optional[str], Optional[str]] = ('samples',),
+                 array_dims: Tuple[str, Optional[str], Optional[str], Optional[str]] = ('samples',),
                  data_split: float = 0.8, chunk_batch: int = None, callback_fn: Callable = None,
                  block_size: List[Tuple[str, int]] = None,
                  sample_size: List[Tuple[str, int]] = None,
@@ -139,7 +139,7 @@ class MultiProcSampler():
             chunk_size (Tuple[int]): The size of chunks in the generated training and testing data.
             train_store (zarr.Group): Zarr store for training data.
             test_store (zarr.Group): Zarr store for testing data.
-            array_dims (Tuple[str, Optional[str], Optional[str]]): Tuple specifying the dimensions of the arrays.
+            array_dims (Tuple[str, Optional[str], Optional[str], Optional[str]]): Tuple specifying the dimensions of the arrays.
             data_split (float): The fraction of data to use for training.
             chunk_batch (int): Number of chunks to process in each batch.
             callback_fn (function): Optional callback function to apply to each chunk after preprocessing.
