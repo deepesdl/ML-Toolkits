@@ -13,27 +13,35 @@ class Trainer:
             self, model: torch.nn.Module, train_data: DataLoader, test_data: DataLoader,
             optimizer: torch.optim.Optimizer, best_model_path: str,
             early_stopping: bool = True, patience: int = 10, loss: Callable = None,
-            metrics: Dict[str, Callable] = None, epochs: int = 10, mlflow_run=None,
+            metrics: Dict[str, Callable] = None, epochs: int = 10, mlflow_run: 'mlflow' = None,
             device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
             create_loss_plot: bool = False,
     ):
         """
         Initialize the Trainer.
 
-        Attributes:
+        Args:
             model (torch.nn.Module): The PyTorch model to train.
             train_data (DataLoader): DataLoader for the training data.
             test_data (DataLoader): DataLoader for the validation/test data.
             optimizer (torch.optim.Optimizer): Optimizer for training.
             best_model_path (str): Path to save the best model.
             early_stopping (bool): Enable or disable early stopping. Defaults to True.
-            patience (int): Number of epochs to wait for improvement before stopping early.
-            loss (torch.nn.Module): Loss function.
-            metrics (Dict[str, Callable]): Dictionary of metrics to evaluate, with metric names as keys and metric functions as values.
-            epochs (int): Number of training epochs.
-            mlflow_run: An MLflow run instance to log training and validation metrics.
-            device (torch.device): Device to run the training on.
-            create_loss_plot (bool): Whether to create a plot of training and validation loss.
+            patience (int): Number of epochs to wait for improvement before stopping early. Defaults to 10.
+            loss (Callable): Loss function used during training.
+            metrics (Dict[str, Callable]): Dictionary of metrics to evaluate during validation, with metric names as keys and metric functions as values.
+            epochs (int): Number of training epochs. Defaults to 10.
+            mlflow_run (mlflow): An MLflow run instance to log training and validation metrics. Defaults to None.
+            device (torch.device): Device to run the training on (CPU or GPU). Defaults to the best available device.
+            create_loss_plot (bool): Whether to create a plot of training and validation loss after training. Defaults to False.
+
+        Attributes:
+            best_val_loss (float): The best validation loss encountered during training, initialized to infinity.
+            strikes (int): Counter tracking the number of consecutive epochs without validation loss improvement.
+            device (torch.device): The device (CPU or GPU) used for training.
+            model_name (str): The name of the model file, extracted from the `best_model_path`.
+            val_list (List[float]): List to store validation loss values for each epoch.
+            train_list (List[float]): List to store training loss values for each epoch.
         """
         self.model = model.to(device)
         self.train_data = train_data
@@ -46,7 +54,7 @@ class Trainer:
         self.strikes = 0
         self.loss = loss
         self.metrics = metrics
-        self.max_epochs = epochs
+        self.epochs = epochs
         self.device = device
         self.mlflow_run = mlflow_run
         self.model_name = os.path.basename(os.path.normpath(self.best_model_path))
@@ -149,7 +157,7 @@ class Trainer:
         Returns:
             torch.nn.Module: The trained model.
         """
-        for epoch in range(self.max_epochs):
+        for epoch in range(self.epochs):
             self._run_epoch(epoch)
             val_loss = self._validate(epoch)
 
