@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import xarray as xr
 from tqdm import tqdm
-from ml4xcube.cube_utilities import get_dim_range
+from ml4xcube.utils import get_dim_range
 
 """
 Function get_insights(cube):
