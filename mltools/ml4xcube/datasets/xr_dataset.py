@@ -75,7 +75,8 @@ class XrDataset():
         self.chunks = None
         self.chunks = self.get_chunks()
         self.dataset = self.concatenate_chunks()
-        self.dataset = self.callback(self.dataset)
+        if self.callback is not None:
+            self.dataset = self.callback(self.dataset)
         if self.scale_fn is not None:
             self.scale_dataset()
             print(self.dataset)
