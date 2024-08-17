@@ -30,28 +30,39 @@ class Trainer:
             self, model: torch.nn.Module, train_data: DataLoader, test_data: DataLoader,
             optimizer: torch.optim.Optimizer, save_every: int, best_model_path: str,
             snapshot_path: str = None, early_stopping: bool = True, patience: int = 10,
-            loss: Callable = None, metrics: Dict[str, Callable] = None,
+            loss: Callable = None, metrics: Dict[str, Callable] = None, epochs: int = 10,
             validate_parallelism: bool = False, create_loss_plot: bool = False
     ):
         """
         Initialize the Trainer for distributed training.
 
-        Attributes:
+        Args:
             model (torch.nn.Module): The PyTorch model to train.
             train_data (DataLoader): DataLoader for the training data.
             test_data (DataLoader): DataLoader for the validation/test data.
             optimizer (torch.optim.Optimizer): Optimizer for training.
             save_every (int): Frequency of saving training snapshots (in epochs).
             best_model_path (str): Path to save the best model.
-            snapshot_path (str): Path to save training snapshots.
+            snapshot_path (str): Path to save training snapshots. Defaults to None.
             early_stopping (bool): Enable or disable early stopping. Defaults to True.
-            patience (int): Number of epochs to wait for improvement before stopping early.
-            loss (Callable): Loss function.
-            metrics (Dict[str, Callable]): Dictionary of metrics to evaluate during validation,
-                with metric names as keys and metric functions as values.
-            validate_parallelism (bool): If set to True, prints loss information from each GPU,
-                useful for debugging and performance tuning.
-            create_loss_plot (bool): Whether to create a plot of training and validation loss.
+            patience (int,): Number of epochs to wait for improvement before stopping early. Defaults to 10.
+            loss (Callable): Loss function. Defaults to None.
+            metrics (Dict[str, Callable]): Dictionary of metrics to evaluate during validation, with metric
+                                                     names as keys and metric functions as values. Defaults to None.
+            epochs (int): Number of epochs to train the model. Defaults to 10.
+            validate_parallelism (bool): If set to True, prints loss information from each GPU, useful for
+                                                   debugging and performance tuning. Defaults to False.
+            create_loss_plot (bool): Whether to create a plot of training and validation loss after training.
+                                               Defaults to False.
+
+        Attributes:
+            gpu_id (int): The ID of the GPU assigned to the current process, derived from the `LOCAL_RANK` environment variable.
+            ddp_model (torch.nn.Module): The PyTorch model wrapped with DistributedDataParallel (DDP) for multi-GPU training.
+            epochs_run (int): The number of epochs that have been run. Used to resume training from a checkpoint.
+            best_val_loss (float): The best validation loss encountered during training, initialized to infinity.
+            strikes (int): A counter tracking the number of consecutive epochs without validation loss improvement.
+            train_list (List[float]): A list to store the average training loss for each epoch.
+            val_list (List[float]): A list to store the average validation loss for each epoch.
         """
         self.gpu_id = int(os.environ["LOCAL_RANK"])  # GPU ID for the current process
         self.model = model.to(self.gpu_id)  # Moves model to the correct device
@@ -68,7 +79,8 @@ class Trainer:
         self.strikes = 0  # Counter for epochs without improvement
         self.loss = loss # Loss function
         self.metrics = metrics # Dict of metrics to compute for validation purposes
-        self.model = DDP(self.model, device_ids=[self.gpu_id], find_unused_parameters=True)  # Wraps the model for DDP
+        self.epochs = epochs
+        self.ddp_model = DDP(self.model, device_ids=[self.gpu_id], find_unused_parameters=True)  # Wraps the model for DDP
         self.validate_parallelism = validate_parallelism
         self.create_loss_plot = create_loss_plot
         self.train_list = list()
@@ -100,7 +112,7 @@ class Trainer:
         """
         inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
         self.optimizer.zero_grad()
-        outputs = self.model(inputs)
+        outputs = self.ddp_model(inputs)
         loss = self.loss(outputs, targets)
         loss.backward()
 
@@ -138,7 +150,7 @@ class Trainer:
         Returns:
             float: The average validation loss across all test data.
         """
-        self.model.eval()  # Set the model to evaluation mode
+        self.ddp_model.eval()  # Set the model to evaluation mode
         running_loss = 0.0
         running_size = 0
         metric_sums = {}
@@ -148,7 +160,7 @@ class Trainer:
             with torch.no_grad():  # No need to track gradients during validation
                 if inputs.numel() == 0: continue
                 inputs, targets = inputs.to(self.gpu_id), targets.to(self.gpu_id)
-                outputs = self.model(inputs)
+                outputs = self.ddp_model(inputs)
                 loss = self.loss(outputs, targets)
                 running_loss += loss.item() * len(inputs)
                 running_size += len(inputs)
@@ -204,20 +216,21 @@ class Trainer:
             epoch (int): The current epoch number, for tracking in the snapshot.
         """
         snapshot = {
-            "MODEL_STATE": self.model.module.state_dict(),
+            "MODEL_STATE": self.ddp_model.module.state_dict(),
             "EPOCHS_RUN": epoch,
         }
         torch.save(snapshot, self.snapshot_path)
         print(f"Epoch {epoch + 1} | Training snapshot saved at {self.snapshot_path}")
 
-    def train(self, max_epochs: int) -> None:
+    @record
+    def train(self) -> torch.nn.Module:
         """
         The main training loop.
 
-        Args:
-            max_epochs (int): The maximum number of epochs to train for.
+        Returns:
+            torch.nn.Module: The model with the best weights loaded.
         """
-        for epoch in range(self.epochs_run, max_epochs):
+        for epoch in range(self.epochs_run, self.epochs):
             self._run_epoch(epoch)
             if self.gpu_id == 0 and epoch % self.save_every == 0 and self.snapshot_path is not None:
                 self._save_snapshot(epoch)
@@ -229,8 +242,8 @@ class Trainer:
             if epoch_val_loss < self.best_val_loss:
                 self.strikes = 0
                 self.best_val_loss = epoch_val_loss
-                # Saving the best model
-                torch.save(self.model.module.state_dict(), self.best_model_path)
+                # Saving the best ddp_model
+                torch.save(self.ddp_model.module.state_dict(), self.best_model_path)
                 if self.gpu_id == 0:
                     print(f"New best model saved with validation loss: {epoch_val_loss}")
             else:
@@ -242,20 +255,21 @@ class Trainer:
                         print('Stopping early due to no improvement.')
                     break
 
+        destroy_process_group()
+        
         if self.create_loss_plot:
             plot_loss(self.train_list, self.val_list)
 
+        # Load the best weights from best_model_path into self.model
+        loc = f"cuda:{0}"
+        self.model.load_state_dict(torch.load(self.best_model_path, map_location=loc))
 
-@record
-def dist_train(trainer: Trainer, total_epochs: int) -> None:
-    """
-    A utility function to manage the distributed training process.
+        print("Best model loaded.")
 
-    Args:
-        trainer (Trainer): The Trainer instance to conduct the training.
-        total_epochs (int): The total number of epochs to train the model.
-    """
-    trainer.train(total_epochs)
-    destroy_process_group()
+        return self.model
+
+
+
+
 
 
