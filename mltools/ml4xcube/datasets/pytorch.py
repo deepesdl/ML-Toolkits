@@ -15,28 +15,31 @@ class PTXrDataset(Dataset):
                  block_sizes: List[Tuple[str, int]] = None, sample_size: List[Tuple[str, int]] = None,
                  overlap: List[Tuple[str, float]] = None, process_chunks: bool = False):
         """
-        Initialize the dataset to manage large datasets efficiently.
+        Initializes a PyTorch-compatible dataset for efficiently managing and processing large xarray datasets,
+        with support for chunking, filtering, and preprocessing.
+
+        Args:
+            ds (xr.Dataset): The input xarray dataset to process.
+            rand_chunk (bool): If True, selects chunks randomly when no chunk indices are provided. Defaults to True.
+            drop_nan (str): Specifies how to handle NaN values in the data. Defaults to 'auto'.
+                - 'auto': Drop the entire sample if any NaN values are present.
+                - 'if_all_nan': Drop the sample if all values are NaN.
+                - 'masked': Drop the subarray if valid values according to the mask are NaN.
+            drop_sample (bool): If True, drops the entire subarray if any value in the subarray does not match the mask. Defaults to False.
+            chunk_indices (List[int]): List of specific chunk indices to process. If None, chunks are selected randomly or sequentially. Defaults to None.
+            apply_mask (bool): If True, applies a filter based on the specified `filter_var` to mask invalid data. Defaults to True.
+            fill_method (str): The method used to fill masked data, such as 'ffill' (forward fill) or 'bfill' (backward fill). Defaults to None.
+            const (float): A constant value to fill masked data if no fill method is provided. Defaults to None.
+            filter_var (str): The variable used to filter the data, typically a mask (e.g., 'land_mask'). Defaults to 'land_mask'.
+            num_chunks (int): The number of chunks to process. If None, all chunks will be processed. Defaults to None.
+            callback (Callable): A function to apply additional processing to each chunk after initial preprocessing. Defaults to None.
+            block_sizes (List[Tuple[str, int]]): Block sizes for splitting the dataset into chunks, defined as a list of tuples (dimension name, block size). Defaults to None.
+            sample_size (List[Tuple[str, int]]): The size of samples to extract from chunks, defined as a list of tuples (dimension name, sample size). Defaults to None.
+            overlap (List[Tuple[str, float]]): The overlap between samples, defined as a list of tuples (dimension name, overlap fraction). Defaults to None.
+            process_chunks (bool,): If True, preprocesses each chunk (e.g., filtering, filling) before returning it. Defaults to False.
 
         Attributes:
-            ds (xr.Dataset): The xarray dataset.
-            rand_chunk (bool): Whether to select chunks randomly.
-            drop_nan (str): Defines the means by which areas with missing values are dropped
-                If 'auto', drop the entire sample if any NaN is contained.
-                If 'if_all_nan', drop the sample if entirely NaN.
-                If 'masked', drop the entire subarray if valid values according to mask are NaN.
-            apply_mask (bool): If true, apply the filter based on the specified filter_var.
-            drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
-            fill_method (str): Method to fill masked data, if any.
-            const (float): Constant value to use for filling masked data, if needed.
-            filter_var (str): Filtering variable name.
-            num_chunks (int): Number of chunks to process dynamically.
-            callback (Callable): Function to apply to each chunk after preprocessing.
-            block_sizes (List[Tuple[str, int]]): Block sizes for considered blocks (of (sub-)chunks).
-            sample_size (List[Tuple[str, int]]): Sample size for chunk splitting.
-            overlap (List[Tuple[str, float]]): Percentage for overlapping samples due to chunk splitting.
-            total_chunks (int): Total number of chunks in the dataset.
-            chunk_indices (List[int]): List of indices of chunks to load.
-            process chunk (bool): Defines whether chunk processing is necessary.
+            total_chunks (int): The total number of chunks in the dataset.
         """
         self.ds = ds
         self.rand_chunk = rand_chunk
@@ -47,7 +50,7 @@ class PTXrDataset(Dataset):
         self.const = const
         self.filter_var = filter_var
         self.num_chunks = num_chunks
-        self.callback_fn = callback
+        self.callback = callback
         self.block_sizes = block_sizes
         self.sample_size = sample_size
         self.overlap = overlap
@@ -87,8 +90,8 @@ class PTXrDataset(Dataset):
             chunk, _ = process_chunk(chunk, self.apply_mask, self.drop_sample, self.filter_var, self.sample_size,
                                      self.overlap, self.fill_method, self.const, self.drop_nan)
 
-        if self.callback_fn:
-            chunk = self.callback_fn(chunk)
+        if self.callback:
+            chunk = self.callback(chunk)
 
         return chunk  # Return the processed chunk
 
