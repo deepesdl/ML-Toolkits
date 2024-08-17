@@ -5,8 +5,8 @@ from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_nan_value
 
 
 def process_chunk(chunk: Dict[str, np.ndarray], use_filter: bool, drop_sample: bool, filter_var: str,
-                  sample_size: List[Tuple[str, int]], overlap: List[Tuple[str, int]], fill_method: str,
-                  const: float, mode: str = False) -> Tuple[Dict[str, np.ndarray], bool]:
+                  sample_size: List[Tuple[str, int]], overlap: List[Tuple[str, float]], fill_method: str,
+                  const: float, drop_nan: str = 'auto') -> Tuple[Dict[str, np.ndarray], bool]:
     """
     Process a single chunk of data.
 
@@ -16,13 +16,15 @@ def process_chunk(chunk: Dict[str, np.ndarray], use_filter: bool, drop_sample: b
         drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
         filter_var (str): The variable to use for filtering.
         sample_size (List[Tuple[str, int]]): Sizes of the samples to be extracted from the chunk along each dimension.
-                                                       Each tuple contains the dimension name and the size along that dimension.
-        overlap (List[Tuple[str, int]]): Overlap for overlapping samples due to chunk splitting.
-                                                   Each tuple contains the dimension name and the overlap fraction along that dimension.
-        drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
+            Each tuple contains the dimension name and the size along that dimension.
+        overlap (List[Tuple[str, float]]): Amount of samples overlap due to chunk splitting.
+            Each tuple contains the dimension name and the overlap fraction along that dimension.
+        drop_nan (str): Defines the means by which areas with missing values are dropped
+                If 'auto', drop the entire sample if any NaN is contained.
+                If 'if_all_nan', drop the sample if entirely NaN.
+                If 'masked', drop the entire subarray if valid values according to mask are NaN.
         fill_method (str): Method to fill masked data, if any.
         const (float): Constant value to use for filling masked data, if needed.
-        all_nan_drop (bool)
 
     Returns:
         Tuple[Dict[str, np.ndarray], bool]: A tuple containing the preprocessed chunk and a boolean indicating if the chunk is valid.
@@ -36,8 +38,7 @@ def process_chunk(chunk: Dict[str, np.ndarray], use_filter: bool, drop_sample: b
         cft = cf
 
     vars = list(cft.keys())
-    cft = drop_nan_values(cft, vars, mode=mode, filter_var=filter_var)
-
+    cft = drop_nan_values(cft, vars, mode=drop_nan, filter_var=filter_var)
 
     if fill_method is not None:
         vars = [var for var in cft.keys() if var != 'split' and var != filter_var]
