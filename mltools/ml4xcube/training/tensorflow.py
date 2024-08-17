@@ -4,37 +4,44 @@ from ml4xcube.training.train_plots import plot_loss
 
 
 class Trainer:
-
     """
     A trainer class for training TensorFlow models on single or no GPU systems.
     """
     def __init__(
             self, model: tf.keras.Model, train_data: tf.data.Dataset, test_data: tf.data.Dataset, best_model_path: str,
-            early_stopping: bool = True, patience: int = 10, tf_log_dir: str = './logs', mlflow_run = None,
+            early_stopping: bool = True, patience: int = 10, tf_log_dir: str = './logs', mlflow_run: 'mlflow' = None,
             epochs: int = 100, train_epoch_steps: int = None, val_epoch_steps: int = None, create_loss_plot: bool = False,
     ):
         """
-        Initialize a Trainer object.
-
-        Attributes:
+        Args:
             model (tf.keras.Model): The TensorFlow model to be trained.
             train_data (tf.data.Dataset): The dataset for training.
             test_data (tf.data.Dataset): The dataset for validation.
-            best_model_path (str): Path to save the best model.
-            early_stopping (bool): Whether to use early stopping. Defaults to True.
-            patience (int): Number of epochs with no improvement after which training will be stopped. Defaults to 10.
+            best_model_path (str): Path to save the best model during training.
+            early_stopping (bool): Whether to use early stopping to stop training when validation loss stops improving.
+                                   Defaults to True.
+            patience (int): Number of epochs with no improvement in validation loss after which training will be stopped.
+                            Defaults to 10.
             tf_log_dir (str): Directory to save TensorBoard logs. Defaults to './logs'.
-            mlflow_run: MLflow run object for logging artifacts. Defaults to None.
+            mlflow_run (mlflow): MLflow run object for logging artifacts and metrics. Defaults to None.
             epochs (int): Number of epochs to train the model. Defaults to 100.
-            train_epoch_steps (int): Number of steps per training epoch. Defaults to None.
-            val_epoch_steps (int): Number of steps per validation epoch. Defaults to None.
-            create_loss_plot (bool): Whether to create a plot of training and validation loss. Defaults to False.
+            train_epoch_steps (int): Number of steps per training epoch. If None, it's calculated based on the dataset.
+                                     Defaults to None.
+            val_epoch_steps (int): Number of steps per validation epoch. If None, it's calculated based on the dataset.
+                                   Defaults to None.
+            create_loss_plot (bool): Whether to create a plot of training and validation loss after training. Defaults to False.
+
+        Attributes:
+            steps_per_train_epoch (int): The number of steps to run in each training epoch. Calculated from the dataset if not provided.
+            steps_per_validation_epoch (int): The number of steps to run in each validation epoch. Calculated from the dataset if not provided.
+            model_name (str): The name of the model, derived from the `best_model_path`.
+            create_loss_plot (bool): Whether to create a loss plot after training.
         """
         self.model = model
         self.train_data = train_data
         self.test_data = test_data
         self.best_model_path = best_model_path
-        self.max_epochs = epochs
+        self.epochs = epochs
         self.early_stopping = early_stopping
         self.patience = patience
         self.tf_log_dir = tf_log_dir
@@ -84,7 +91,7 @@ class Trainer:
 
         history = self.model.fit(
             self.train_data,
-            epochs=self.max_epochs,
+            epochs=self.epochs,
             steps_per_epoch=self.steps_per_train_epoch,
             validation_data=self.test_data,
             validation_steps=self.steps_per_validation_epoch,
