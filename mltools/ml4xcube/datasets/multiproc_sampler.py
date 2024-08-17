@@ -162,7 +162,6 @@ class MultiProcSampler():
         self.array_dims = tuple(extra_dims) + tuple(dim for dim in array_dims if dim in sample_dims)
 
         self.data_split = data_split
-        self.chunk_batch = chunk_batch if chunk_batch is not None else self.nproc
         self.callback = callback
         self.block_size = block_size
         self.total_chunks = int(calculate_total_chunks(self.ds, self.block_size))
@@ -171,6 +170,7 @@ class MultiProcSampler():
         self.data_fraq = data_fraq
         self.num_chunks = int(self.total_chunks * self.data_fraq)
         self.nproc = min(nproc, self.num_chunks)
+        self.chunk_batch = chunk_batch if chunk_batch is not None else self.nproc
         self.scale_fn = scale_fn
         self.scale_params = None
         self.set_scale_params()
