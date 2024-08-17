@@ -1,8 +1,8 @@
 import numpy as np
 import xarray as xr
 import dask.array as da
-from typing import Dict, List
-from ml4xcube.cube_utilities import get_chunk_sizes
+from typing import Dict, List, Union
+from ml4xcube.utils import get_chunk_sizes
 
 
 def apply_filter(ds: Dict[str, np.ndarray], filter_var: str, drop_sample: bool = False) -> Dict[str, np.ndarray]:
@@ -46,7 +46,7 @@ def apply_filter(ds: Dict[str, np.ndarray], filter_var: str, drop_sample: bool =
     return ds
 
 
-def drop_nan_values(ds: Dict[str, np.ndarray], vars: List[str], filter_var: str = None) -> Dict[str, np.ndarray]:
+def drop_nan_values(ds: Dict[str, np.ndarray], vars: List[str], mode: str = 'auto', filter_var: str = 'filter_mask') -> Dict[str, np.ndarray]:
     """
     Drop NaN values from the dataset. If any value in a subarray is NaN, drop the entire subarray.
     For lists of points, drop single NaN values. If filter_var is defined, it will use this mask
@@ -55,7 +55,11 @@ def drop_nan_values(ds: Dict[str, np.ndarray], vars: List[str], filter_var: str 
     Args:
         ds (Dict[str, np.ndarray]): The dataset to filter. It should be a dictionary where keys are variable names and values are numpy arrays.
         vars (List[str]): The variables to check for NaN values.
-        filter_var (str): The name of the mask variable in the dataset. If None, drop the entire subarray based on NaN values alone.
+        mode (str): Defines the means by which areas with missing values are dropped
+            If 'auto', drop the entire sample if any NaN is contained.
+            If 'if_all_nan', drop the sample if entirely NaN.
+            If 'masked', drop the entire subarray if valid values according to mask are NaN.
+        filter_var (str): The name of the mask variable in the dataset. Required if mode is 'masked'.
 
     Returns:
         Dict[str, np.ndarray]: The filtered dataset.
@@ -76,7 +80,7 @@ def drop_nan_values(ds: Dict[str, np.ndarray], vars: List[str], filter_var: str 
             elif value.ndim in (2, 3, 4):  # Multi-dimensional arrays
                 axes_to_check = tuple(range(1, value.ndim))
                 if len(axes_to_check) == 1: axes_to_check = 1
-                if mask_values is not None:
+                if mode == 'masked' and mask_values is not None:
                     # Create a mask based on filter_var
                     valid_mask = np.any(ds[filter_var], axis=axes_to_check)
                     valid_mask_lists.append(valid_mask)
@@ -92,6 +96,8 @@ def drop_nan_values(ds: Dict[str, np.ndarray], vars: List[str], filter_var: str 
                     valid_mask = np.all(validation_mask, axis=axes_to_check)
 
                     valid_mask_lists.append(valid_mask)
+                elif mode == 'if_all_nan':
+                    valid_mask_lists.append(~np.isnan(value).all(axis=axes_to_check))
                 else:
                     # If no filter_var, just check for NaNs
                     valid_mask_lists.append(~np.isnan(value).any(axis=axes_to_check))
@@ -103,128 +109,163 @@ def drop_nan_values(ds: Dict[str, np.ndarray], vars: List[str], filter_var: str 
     return ds
 
 
-def fill_nan_values(ds: Dict[str, np.ndarray], vars: List[str], method: str = 'mean', const: float | str | bool = None) -> Dict[str, np.ndarray]:
+def fill_nan_values(ds: Union[Dict[str, np.ndarray], xr.Dataset], vars: List[str], method: str = 'mean', const: float | str | bool = None) -> Union[Dict[str, np.ndarray], xr.Dataset]:
     """
-    Fill NaN values in the dataset. If method is 'mean', fill NaNs with the mean value of the non-NaN values.
-    If method is 'sample_mean', fill NaNs with the sample mean value.
-    If method is 'noise', fill NaNs with random noise within the range of the non-NaN values.
-    If method is 'constant', fill NaNs with the specified constant value.
+    Fill NaN values in the dataset.
 
     Args:
-        ds (Dict[str, np.ndarray]): The dataset to fill. It should be a dictionary where keys are variable names and values are numpy arrays.
+        ds (Union[Dict[str, np.ndarray], xr.Dataset]): The dataset to fill.
         vars (List[str]): The variables to fill NaN values for.
-        method (str): The method to use for filling NaN values. Options are 'mean', 'sample_mean', 'noise', or 'constant'.
-        constant_value (float | str | bool): The constant value to use for filling NaN values when method is 'constant'.
+        method (str): The method to use for filling NaN values.
+            If 'sample_mean', fill NaNs with the sample mean value.
+            If 'mean', fill NaNs with the mean value of the non-NaN values.
+            If 'noise', fill NaNs with random noise within the range of the non-NaN values.
+            If 'constant', fill NaNs with the specified constant value.
+        const (float | str | bool): The constant value to use for filling when method is 'constant'.
 
     Returns:
         Dict[str, np.ndarray]: The dataset with NaN values filled.
     """
     for var in vars:
-        if var in ds:
-            value = ds[var]
-            if np.isnan(value).any():
-                if method == 'mean':
-                    mean_value = np.nanmean(value)
-                    ds[var] = np.where(np.isnan(value), mean_value, value)
-                elif method == 'sample_mean':
-                    mean_value = np.nanmean(value, axis=0, keepdims=True)
-                    ds[var] = np.where(np.isnan(value), mean_value, value)
-                elif method == 'noise':
-                    non_nan_values = value[~np.isnan(value)]
-                    min_value = np.min(non_nan_values)
-                    max_value = np.max(non_nan_values)
-                    random_noise = np.random.uniform(min_value, max_value, size=value.shape)
-                    ds[var] = np.where(np.isnan(value), random_noise, value)
-                elif method == 'constant':
-                    if const is not None:
-                        ds[var] = np.where(np.isnan(value), const, value)
-                    else:
-                        raise ValueError("Constant value must be provided when method is 'constant'")
+        if isinstance(ds, dict):
+            if var in ds:
+                value = ds[var]
+                if np.isnan(value).any():
+                    if method == 'mean':
+                        mean_value = np.nanmean(value)
+                        ds[var] = np.where(np.isnan(value), mean_value, value)
+                    elif method == 'sample_mean':
+                        axes_to_check = tuple(range(1, value.ndim))
+                        if len(axes_to_check) == 1: axes_to_check = 1
+                        mean_value = np.nanmean(value, axis=axes_to_check, keepdims=True)
+                        ds[var] = np.where(np.isnan(value), mean_value, value)
+
+                    elif method == 'noise':
+                        non_nan_values = value[~np.isnan(value)]
+                        min_value = np.min(non_nan_values)
+                        max_value = np.max(non_nan_values)
+                        random_noise = np.random.uniform(min_value, max_value, size=value.shape)
+                        ds[var] = np.where(np.isnan(value), random_noise, value)
+                    elif method == 'constant':
+                        if const is not None:
+                            ds[var] = np.where(np.isnan(value), const, value)
+                        else:
+                            raise ValueError("Constant value must be provided when method is 'constant'")
+
     return ds
 
 
-def get_range(ds: xr.Dataset, var: str) -> List[float]:
+def get_range(ds: Union[xr.Dataset, Dict[str, np.ndarray]], exclude_vars:List[str] = list()) -> Dict[str, List[float]]:
     """
-    Returns min and max values of the variable `var` of xarray dataset `ds`.
+    Returns min and max values for all variables in the xarray dataset or dictionary.
 
     Args:
-        ds (xr.Dataset): The xarray dataset.
-        var (str): The variable name to get the range for.
+        ds (Union[xr.Dataset, Dict[str, np.ndarray]]): The xarray dataset or dictionary of variables.
+        exclude_vars (List[str]): Variable name to exclude from calculation, such as a mask variable (e.g., 'land_mask').
 
     Returns:
-        List[float]: A list containing the min and max values.
+        Dict[str, List[float]]: A dictionary containing the min and max values for each variable.
     """
-    data_var = ds[var]
-    if isinstance(data_var, np.ndarray):
-        min = np.nanmin(data_var)
-        max = np.nanmax(data_var)
-    else:
-        min = data_var.min().values
-        max = data_var.max().values
-    return [min, max]
+    data_vars = ds.data_vars if isinstance(ds, xr.Dataset) else ds.keys()
+    range_dict = {}
+    for var in data_vars:
+        if var == 'split' or var == 'filter_mask' or var in exclude_vars: continue
+        data_var = ds[var]
+        min_val = np.nanmin(data_var) if isinstance(data_var, np.ndarray) else data_var.min().values.item()
+        max_val = np.nanmax(data_var) if isinstance(data_var, np.ndarray) else data_var.max().values.item()
+        range_dict[var] = [min_val, max_val]
+    return range_dict
 
 
-def get_statistics(ds: xr.Dataset, var: str) -> List[float]:
+def get_statistics(ds: Union[xr.Dataset, Dict[str, np.ndarray]], exclude_vars:List[str] = list()) -> Dict[str, List[float]]:
     """
-    Returns mean and std values of the variable `var` of xarray dataset `ds`.
+    Returns mean and std values for all variables in the xarray dataset or dictionary.
 
     Args:
-        ds (xr.Dataset): The xarray dataset.
-        var (str): The variable name to get the statistics for.
+        ds (Union[xr.Dataset, Dict[str, np.ndarray]]): The xarray dataset or dictionary of variables.
+        exclude_vars (str): Variable name to exclude from calculation, such as a mask variable (e.g., 'land_mask').
 
     Returns:
-        List[float]: A list containing the mean and std values.
+        Dict[str, List[float]]: A dictionary containing the mean and std values for each variable.
     """
-    data_var = ds[var]
-    if isinstance(data_var, np.ndarray):
-        mean = np.nanmean(data_var)
-        std = np.nanstd(data_var)
-    else:
-        mean = data_var.mean().compute().values.item()
-        std = data_var.std().compute().values.item()
+    data_vars = ds.data_vars if isinstance(ds, xr.Dataset) else ds.keys()
+    stats_dict = {}
+    for var in data_vars:
+        if var == 'split' or var == 'filter_mask' or var in exclude_vars: continue
+        data_var = ds[var]
+        mean_val = np.nanmean(data_var) if isinstance(data_var, np.ndarray) else data_var.mean().values.item()
+        std_val = np.nanstd(data_var) if isinstance(data_var, np.ndarray) else data_var.std().values.item()
+        stats_dict[var] = [mean_val, std_val]
+    return stats_dict
 
-    return [mean, std]
 
-
-def normalize(x: np.ndarray, xmin: float, xmax: float) -> np.ndarray:
+def normalize(ds: Union[xr.Dataset, Dict[str, np.ndarray]], range_dict: Dict[str, List[float]], filter_var: str = None) -> Union[xr.Dataset, Dict[str, np.ndarray]]:
     """
-    Perform min-max feature scaling of `x`, shifting values to range [0,1].
+    Normalize all variables in the dataset or dictionary using the provided range dictionary.
 
     Args:
-        x (np.ndarray): The array to normalize.
-        xmin (float): The minimum value of the range.
-        xmax (float): The maximum value of the range.
+        ds (Union[xr.Dataset, Dict[str, np.ndarray]]): The xarray dataset  or dictionary to normalize.
+        range_dict (Dict[str, List[float]]): Dictionary with min and max values for each variable.
+        filter_var (str): Variable name to exclude from normalization, such as a mask variable (e.g., 'land_mask').
 
     Returns:
-        np.ndarray: The normalized array.
+        Union[xr.Dataset, Dict[str, np.ndarray]]: The normalized dataset or dictionary.
     """
-    return (x - xmin) / (xmax - xmin)
+    normalized_ds = ds.copy()
+    data_vars = normalized_ds.data_vars if isinstance(normalized_ds, xr.Dataset) else normalized_ds.keys()
+    for var in data_vars:
+        if var == 'split' or var == filter_var: continue
+        if var in range_dict:
+            xmin, xmax = range_dict[var]
+            if xmax != xmin:
+                normalized_data = (ds[var] - xmin) / (xmax - xmin)
+                if isinstance(normalized_ds, xr.Dataset):
+                    normalized_ds[var] = normalized_data
+                else:
+                    normalized_ds[var] = normalized_data
+            else:
+                normalized_ds[var] = ds[var]  # If xmin == xmax, normalization isn't possible
+    return normalized_ds
 
 
-def standardize(x: np.ndarray, xmean: float, xstd: float) -> np.ndarray:
+def standardize(ds: Union[xr.Dataset, Dict[str, np.ndarray]], stats_dict: Dict[str, List[float]], filter_var: str = None) -> Union[xr.Dataset, Dict[str, np.ndarray]]:
     """
-    Transforms the distribution to mean 0 and variance 1.
+    Standardize all variables in the dataset or dictionary using the provided statistics dictionary.
 
     Args:
-        x (np.ndarray): The array to standardize.
-        xmean (float): The mean value for standardization.
-        xstd (float): The standard deviation value for standardization.
+        ds (Union[xr.Dataset, Dict[str, np.ndarray]]): The xarray dataset or dictionary to standardize.
+        stats_dict (Dict[str, List[float]]): Dictionary with mean and std values for each variable.
+        filter_var (str): Variable name to exclude from standardization, such as a mask variable (e.g., 'land_mask').
 
     Returns:
-        np.ndarray: The standardized array.
+        Union[xr.Dataset, Dict[str, np.ndarray]]: The standardized dataset or dictionary.
     """
-    return (x - xmean) / xstd
+    standardized_ds = ds.copy()
+    data_vars = standardized_ds.data_vars if isinstance(standardized_ds, xr.Dataset) else standardized_ds.keys()
+    for var in data_vars:
+        if var == 'split' or var == filter_var: continue
+        if var in stats_dict:
+            xmean, xstd = stats_dict[var]
+            if xstd != 0:
+                standardized_data = (ds[var] - xmean) / xstd
+                if isinstance(standardized_ds, xr.Dataset):
+                    standardized_ds[var] = standardized_data
+                else:
+                    standardized_ds[var] = standardized_data
+            else:
+                standardized_ds[var] = ds[var] - xmean  # If xstd == 0, standardization isn't possible
+    return standardized_ds
 
 
-def assign_mask(ds: xr.Dataset, mask: da.Array, mask_name: str, stack_dim: str = None) -> xr.Dataset:
+def assign_mask(ds: xr.Dataset, mask: da.Array, mask_name: str = None, stack_dim: str = 'time') -> xr.Dataset:
     """
     Assign a mask to a dataset, expanding it along a specified dimension if provided.
 
     Args:
         ds (xr.Dataset): The dataset to which the mask will be assigned.
         mask (da.Array): The mask array to be assigned to the dataset.
-        mask_name (str): The name to be used for the mask variable in the dataset.
-        stack_dim (str, optional): The dimension along which to expand the mask. If None, the mask is not expanded. Default is None.
+        mask_name (str): The name to be used for the mask variable in the dataset. filter_mask if None
+        stack_dim (str): The dimension along which to expand the mask. If None, the mask is not expanded. Default is None.
 
     Returns:
         xr.Dataset: The dataset with the mask assigned.
@@ -254,6 +295,9 @@ def assign_mask(ds: xr.Dataset, mask: da.Array, mask_name: str, stack_dim: str =
     # Rechunk the mask to align with the dataset's chunk sizes for the common dimensions
     chunk_sizes=([v for k, v in get_chunk_sizes(ds)])
     mask = mask.rechunk(chunks=chunk_sizes)
+
+    # Set mask name
+    if mask_name is None: mask_name = 'filter_mask'
 
     # Assign the mask to the dataset using the provided mask name
     xds = ds.assign({
