@@ -3,27 +3,26 @@ import numpy as np
 import xarray as xr
 import tensorflow as tf
 from typing import Tuple, List, Dict
-from ml4xcube.cube_utilities import split_chunk
-from ml4xcube.cube_utilities import get_chunk_by_index, calculate_total_chunks
-from ml4xcube.preprocessing import apply_filter, drop_nan_values, fill_nan_values
+from ml4xcube.datasets.chunk_processing import process_chunk
+from ml4xcube.utils import get_chunk_by_index, calculate_total_chunks
 
 
 class TFXrDataset:
-    def __init__(self, ds: xr.Dataset, rand_chunk: bool = True, drop_nan: bool = True,
-                 chunk_indices: list = None, drop_nan_masked: bool = False, apply_mask: bool = True,
-                 drop_sample: bool = False, fill_method: str = None, const: float = None,
+    def __init__(self, ds: xr.Dataset, rand_chunk: bool = True, drop_nan: str = 'auto', chunk_indices: list = None,
+                 apply_mask: bool = True, drop_sample: bool = False, fill_method: str = None, const: float = None,
                  filter_var: str = 'land_mask', num_chunks: int = None, callback_fn = None,
-                 block_size: List[Tuple[str, int]] = None,
-                 sample_size: List[Tuple[str, int]] = None,
-                 overlap: List[Tuple[str, float]] = None):
+                 block_size: List[Tuple[str, int]] = None, sample_size: List[Tuple[str, int]] = None,
+                 overlap: List[Tuple[str, float]] = None, process_chunks: bool = False):
         """
         Initialize the TensorFlow dataset.
 
         Attributes:
             ds (xr.Dataset): The xarray dataset.
             rand_chunk (bool): Whether to select chunks randomly.
-            drop_nan (bool): Whether to drop NaN values.
-            drop_nan_masked (bool): If true, NaN values are dropped using the mask specified by filter_var.
+            drop_nan (str): Defines the means by which areas with missing values are dropped
+                If 'auto', drop the entire sample if any NaN is contained.
+                If 'if_all_nan', drop the sample if entirely NaN.
+                If 'masked', drop the entire subarray if valid values according to mask are NaN.
             apply_mask (bool): If true, apply the filter based on the specified filter_var.
             drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
             fill_method (str): Method to fill masked data, if any.
@@ -36,21 +35,23 @@ class TFXrDataset:
             overlap (List[Tuple[str, float]]): Percentage of overlap for samples due to chunk splitting.
             total_chunks (int): Total number of chunks in the dataset.
             chunk_indices (List[int]): List of indices specifying which chunks to process.
+            process chunk (bool): Defines whether chunk processing is necessary.
         """
         self.ds = ds
         self.rand_chunk = rand_chunk
         self.drop_nan = drop_nan
-        self.drop_nan_masked = drop_nan_masked
         self.apply_mask = apply_mask
         self.drop_sample = drop_sample
         self.fill_method = fill_method
         self.const = const
         self.filter_var = filter_var
         self.num_chunks = num_chunks
-        self.callback_fn = callback_fn
+        self.callback = callback_fn
         self.block_size = block_size
         self.sample_size = sample_size
         self.overlap = overlap
+        self.process_chunks = process_chunks
+
         self.total_chunks = calculate_total_chunks(ds)
         if not chunk_indices is None:
             self.chunk_indices = chunk_indices
@@ -77,29 +78,13 @@ class TFXrDataset:
         """
         for idx in self.chunk_indices:
             chunk = get_chunk_by_index(self.ds, idx)
-            cf = split_chunk(chunk, self.sample_size, overlap=self.overlap)
 
-            if self.apply_mask:
-                cft = apply_filter(cf, self.filter_var, self.drop_sample)
-            else:
-                cft = cf
+            if self.process_chunks:
+                chunk, _ = process_chunk(chunk, self.apply_mask, self.drop_sample, self.filter_var, self.sample_size,
+                                         self.overlap, self.fill_method, self.const, self.drop_nan)
 
-            if self.drop_nan:
-                vars = list(cft.keys())
-                if self.drop_nan_masked:
-                    cft = drop_nan_values(cft, vars, self.filter_var)
-                else:
-                    cft = drop_nan_values(cft, vars)
-
-            valid_chunk = all(np.nan_to_num(cft[var]).sum() > 0 for var in cf)
-
-            if valid_chunk:
-                if self.fill_method is not None:
-                    vars = [var for var in cft.keys() if var != 'split' and var != self.filter_var]
-                    cft = fill_nan_values(cft, vars, self.fill_method, self.const)
-
-            if self.callback_fn:
-                cft = self.callback_fn(cft)
+            if self.callback:
+                cft = self.callback(cft)
 
             yield cft
 
@@ -111,7 +96,7 @@ class TFXrDataset:
             tf.data.Dataset: The TensorFlow Dataset object.
         """
         example_chunk = next(self.generate())
-        if self.callback_fn is None:
+        if self.callback is None:
             output_signature = {name: tf.TensorSpec(shape=(None,), dtype=tf.float32)
                                 for name in example_chunk.keys()}
         else:
