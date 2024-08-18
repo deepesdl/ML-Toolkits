@@ -15,7 +15,8 @@ class Trainer:
             self,
             model: BaseEstimator, train_data: Union[Any, Tuple[np.ndarray, np.ndarray]],
             test_data: Union[Any, Tuple[np.ndarray, np.ndarray]] = None, metrics: Dict[str, Callable] = None,
-            model_path: str = None, batch_training: bool = False, mlflow_run=None, task_type: str = 'supervised'
+            model_path: str = None, batch_training: bool = False, mlflow_run: 'mlflow' = None,
+            task_type: str = 'supervised'
         ):
         """
         Initialize a Trainer object.
@@ -27,7 +28,7 @@ class Trainer:
             metrics (Dict[str, Callable]): A list of functions that compute a metric between predictions and true values.
             model_path (str): Path to save the best model.
             batch_training (bool): Whether to use batch training; if False, the model will be trained on complete data at once.
-            mlflow_run: An MLflow run instance to log training and validation metrics.
+            mlflow_run (mlflow): An MLflow run instance to log training and validation metrics.
             task_type (str): The type of task, either 'supervised' or 'unsupervised'.
         """
         self.model = model
