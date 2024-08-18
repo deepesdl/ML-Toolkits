@@ -144,6 +144,8 @@ class MultiProcSampler():
             train_cube (zarr.Group): The Zarr store for training data.
             test_cube (zarr.Group): The Zarr store for testing data.
             scale_params (Dict[str, Any]): The parameters used for scaling the dataset, determined by the scaling function (`scale_fn`).
+            remainder_data_train (Dict[str, np.ndarray]): Stores remainder training data that couldn't be appended due to size not being a multiple of chunk_size[0].
+            remainder_data_test (Dict[str, np.ndarray]): Stores remainder testing data that couldn't be appended due to size not being a multiple of chunk_size[0].
         """
         self.ds = ds
         self.rand_chunk = rand_chunk
@@ -177,6 +179,9 @@ class MultiProcSampler():
         self.chunk_size = chunk_size
         if chunk_size is None: self.chunk_size = 'auto'
 
+        self.remainder_data_train = {var: np.empty(0) for var in self.ds.keys() if var != 'split'}
+        self.remainder_data_test = {var: np.empty(0) for var in self.ds.keys() if var != 'split'}
+
         self.total_chunks = calculate_total_chunks(ds)
         self.create_cubes()
 
@@ -205,6 +210,8 @@ class MultiProcSampler():
         Returns:
             None
         """
+        chunk_dim_size = self.chunk_size[0]
+
         for train_data, test_data in processed_chunks:
 
             if train_data is None and test_data is None:
@@ -220,15 +227,45 @@ class MultiProcSampler():
                 print(f"Train data samples: {train_data[var].shape}")
                 print(f"Test data samples: {test_data[var].shape}")
 
-                if train_data[var].shape[0] > 0:
-                    train_var_data = da.from_array(train_data[var], chunks=self.chunk_size)
-                    # Assign dimensions to data arrays
+                # Concatenate remainder data if it exists
+                if self.remainder_data_train[var].size > 0:
+                    train_data[var] = np.concatenate([self.remainder_data_train[var], train_data[var]], axis=0)
+                    self.remainder_data_train[var] = np.empty(0)  # Clear the remainder once concatenated
+
+                if self.remainder_data_test[var].size > 0:
+                    test_data[var] = np.concatenate([self.remainder_data_test[var], test_data[var]], axis=0)
+                    self.remainder_data_test[var] = np.empty(0)  # Clear the remainder once concatenated
+
+                # Calculate how much data can be appended (multiple of chunk_dim_size)
+                train_size = train_data[var].shape[0]
+                test_size = test_data[var].shape[0]
+
+                # Determine the number of full chunks that can be stored
+                num_train_chunks = train_size // chunk_dim_size
+                num_test_chunks = test_size // chunk_dim_size
+
+                # Compute the remainder
+                train_remainder_size = train_size % chunk_dim_size
+                test_remainder_size = test_size % chunk_dim_size
+
+                if num_train_chunks > 0:
+                    train_var_data = da.from_array(train_data[var][:num_train_chunks * chunk_dim_size],
+                                                   chunks=self.chunk_size)
                     train_data_arrays[var] = (self.array_dims, train_var_data)
 
-                if test_data[var].shape[0] > 0:
-                    test_var_data = da.from_array(test_data[var], chunks=self.chunk_size)
-                    # Assign dimensions to data arrays
+                if num_test_chunks > 0:
+                    test_var_data = da.from_array(test_data[var][:num_test_chunks * chunk_dim_size],
+                                                  chunks=self.chunk_size)
                     test_data_arrays[var] = (self.array_dims, test_var_data)
+
+                # Store the remainder data for future concatenation
+                if train_remainder_size > 0:
+                    self.remainder_data_train[var] = train_data[var][-train_remainder_size:]
+                    print('train remainder: ', self.remainder_data_train[var].shape)
+
+                if test_remainder_size > 0:
+                    self.remainder_data_test[var] = test_data[var][-test_remainder_size:]
+                    print('test remainder: ', self.remainder_data_test[var].shape)
 
             if train_data_arrays:
                 train_ds = xr.Dataset(train_data_arrays)
@@ -236,7 +273,6 @@ class MultiProcSampler():
                 if not os.path.exists(self.train_cube):
                     train_ds.to_zarr(self.train_cube)
                 else:
-                    print("if train_data_arrays:")
                     train_ds.to_zarr(self.train_cube, mode='a', append_dim=self.array_dims[0])
 
             if test_data_arrays:
@@ -245,7 +281,6 @@ class MultiProcSampler():
                 if not os.path.exists(self.test_cube):
                     test_ds.to_zarr(self.test_cube)
                 else:
-                    print("if test_data_arrays:")
                     test_ds.to_zarr(self.test_cube, mode='a', append_dim=self.array_dims[0])
 
     def create_cubes(self) -> None:
@@ -282,3 +317,4 @@ class MultiProcSampler():
         train_ds = xr.open_zarr(self.train_cube)
         test_ds = xr.open_zarr(self.test_cube)
         return train_ds, test_ds
+
