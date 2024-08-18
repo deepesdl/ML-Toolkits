@@ -20,7 +20,7 @@ from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 
 """
 In this file the gaps created in the GapDataset class will be filled.
-The Gapfiller class builds for each missing value an own model.
+The Gapfiller class builds for each missing value an own ddp_model.
 So far only Support Vector Regression is tested but other ML algorithms, hyperparameters and predictors can be added.
 
 Example
@@ -81,7 +81,7 @@ class Gapfiller:
     def gapfill(self) -> None:
         """
         Fill gaps in the data using machine learning models.
-        The method fills each gap by building a model individually.
+        The method fills each gap by building a ddp_model individually.
 
         Returns:
             None
@@ -212,7 +212,7 @@ class Gapfiller:
 
     def fill_the_gaps(self, gap_indices: np.ndarray) -> Tuple[np.ndarray, List[float], List[float]]:
         """
-        Fill the gaps in the data array using a pixel model.
+        Fill the gaps in the data array using a pixel ddp_model.
 
         This method uses parallel processing to fill gaps for each pixel specified in the gap_indices.
         It utilizes a pool of workers to predict values for each gap pixel and updates the data array
@@ -252,7 +252,7 @@ class Gapfiller:
         """
         Fill a single gap in the data using machine learning models.
 
-        This method fills a single gap specified by the `gap_index` by training a machine learning model.
+        This method fills a single gap specified by the `gap_index` by training a machine learning ddp_model.
         It handles different predictor strategies and gap interpolation.
 
         Args:
@@ -332,10 +332,10 @@ class Gapfiller:
 
     def create_dataframe(self, coords: List[List[int]]) -> pd.DataFrame:
         """
-        Create a pandas DataFrame for machine learning model training.
+        Create a pandas DataFrame for machine learning ddp_model training.
 
-        This method creates a DataFrame using the specified coordinates for training a machine learning model.
-        It prepares the data for model training and prediction.
+        This method creates a DataFrame using the specified coordinates for training a machine learning ddp_model.
+        It prepares the data for ddp_model training and prediction.
 
         Args:
             coords (List[List[int]]): List of coordinates [row, column] used as predictors.
@@ -459,7 +459,7 @@ class Gapfiller:
             # Replace the minimum element in the distances array with a very large number
             distances[index_min_dist] = np.inf
 
-        # Add the index of the pixel for which the model is being built
+        # Add the index of the pixel for which the ddp_model is being built
         selected_coords.append([gap_index[0], gap_index[1]])
 
         return selected_coords
@@ -469,7 +469,7 @@ class Gapfiller:
         Preprocess the DataFrame by handling columns with gaps.
 
         This method preprocesses the DataFrame by removing columns with gaps in the target row.
-        It ensures that the DataFrame is suitable for machine learning model training.
+        It ensures that the DataFrame is suitable for machine learning ddp_model training.
 
         Args:
             dataframe (pd.DataFrame): The DataFrame containing historical data and target values.
@@ -580,9 +580,9 @@ class Gapfiller:
 
     def train_model(self, X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[float]]:
         """
-        Perform machine learning model training and prediction.
+        Perform machine learning ddp_model training and prediction.
 
-        This method trains a machine learning model using the training data and predicts values for the test data.
+        This method trains a machine learning ddp_model using the training data and predicts values for the test data.
         It handles different hyperparameter search methods and returns the predicted values and validation scores.
 
         Args:
@@ -595,7 +595,7 @@ class Gapfiller:
                 predicted (Optional[np.ndarray]): The predicted values for the test data.
                 validation_score (Optional[float]): The cross-validation score (if available).
         """
-        # Performing gap filling using Support Vector Regression (SVR) as the predictive model.
+        # Performing gap filling using Support Vector Regression (SVR) as the predictive ddp_model.
         if self.learning_function == "SVR":
             # Combine sample for the standardization procedure
             sample = np.vstack((X_train, X_test))
@@ -607,7 +607,7 @@ class Gapfiller:
 
             if self.hyperparameters == 'Custom':
                 estimator = SVR()
-                # Set the hyperparameters for the SVR model
+                # Set the hyperparameters for the SVR ddp_model
                 params = {'kernel': 'linear', 'gamma': 'scale', 'C': 1000, 'epsilon': 1}
                 estimator.set_params(**params)
 
@@ -619,7 +619,7 @@ class Gapfiller:
                 except:
                     return None, None
 
-                # Fit the SVR model on the training data and predict on the test data
+                # Fit the SVR ddp_model on the training data and predict on the test data
                 estimator.fit(X_train, np.ravel(y_train))
                 predicted = estimator.predict(X_test)
             else:
@@ -643,9 +643,9 @@ class Gapfiller:
                 except:
                     return None, None
 
-                # Get the best SVR model from the optimizer
+                # Get the best SVR ddp_model from the optimizer
                 regression = optimizer.best_estimator_
-                # Predict using the best SVR model on the test data
+                # Predict using the best SVR ddp_model on the test data
                 predicted = regression.predict(X_test)
                 # Get the validation score (negative mean absolute error) from the optimizer
                 validation_score = abs(optimizer.best_score_)
