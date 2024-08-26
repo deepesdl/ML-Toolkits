@@ -44,11 +44,13 @@ class Gapfiller:
         """
         Initialize the Gapfiller class.
 
-        Attributes:
+        Args:
             ds_name (str): The name of the dataset.
-            learning_function (str): The type of learning function. (for now SVR only)
             hyperparameters (str): Hyperparameter search method ('RandomGridSearch' | 'FullGridSearch' | 'Custom').
             predictor (str): Predictor strategy ('AllPoints' | 'RandomPoints' | 'lccs_class' or other extra matrix predictors).
+
+        Attributes
+            learning_function (str): The type of learning function. (for now SVR only)
             actual_matrix (np.ndarray): The actual data matrix with gaps.
             data_with_gaps (dict): A dictionary containing data matrices with different gap sizes.
             directory (str): The directory where results and data are stored.

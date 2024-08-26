@@ -15,17 +15,25 @@ This file can be helpful to extract other variables as predictors and match the 
 
 
 class HelpingPredictor:
-    def __init__(self, ds: xr.Dataset, variable: str, ds_predictor: xr.DataArray, predictor_path: str,
-                 predictor: str = 'lccs_class', layer_dim: str = None):
+    def __init__(
+        self, ds: xr.Dataset, variable: str, ds_predictor: xr.DataArray,
+        predictor_path: str, predictor: str = 'lccs_class', layer_dim: str = None
+    ):
         """
         Class to get the predictor data for a specific variable.
 
+        Args:
+            ds (xarray.Dataset): The input dataset containing the variable to be estimated (target variable).
+            variable (str): The name of the variable in `ds` that you want to estimate.
+            ds_predictor (xarray.DataArray): The dataset containing the predictor variable that will be used for estimation.
+            predictor_path (str): The file path where the processed predictor data will be saved as a Zarr dataset.
+            predictor (str): The name of the predictor variable to be used. Defaults to 'lccs_class'.
+            layer_dim (str): The name of the layer dimension (e.g., 'time', 'depth'). If not specified, the first dimension of the target variable will be used.
+
         Attributes:
             ds_variable (xarray.DataArray): The dataset with the target variable you want to estimate.
-            ds_predictor (xarray.DataArray): The dataset with the predictor variable that will help the estimation.
-            predictor (str): The name of the predictor variable.
-            predictor_path (str): The path to save the processed predictor data.
-            layer_dim (str): The dimension along which to iterate (e.g., 'time').
+            dim1 (str): The name of the first spatial dimension (e.g., 'latitude').
+            dim2 (str): The name of the second spatial dimension (e.g., 'longitude').
         """
         self.layer_dim = layer_dim
         self.ds_variable = ds[variable]
@@ -53,7 +61,6 @@ class HelpingPredictor:
         layer_coords = [s for s in dims if s != self.layer_dim]
         self.dim1 = layer_coords[0]
         self.dim2 = layer_coords[1]
-
 
     def get_predictor_data(self) -> str:
         """
