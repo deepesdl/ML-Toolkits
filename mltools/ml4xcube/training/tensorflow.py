@@ -8,7 +8,7 @@ class Trainer:
     A trainer class for training TensorFlow models on single or no GPU systems.
     """
     def __init__(
-        self, model: tf.keras.Model, train_data: tf.data.Dataset, test_data: tf.data.Dataset, best_model_path: str,
+        self, model: tf.keras.Model, train_data: tf.data.Dataset, test_data: tf.data.Dataset, model_path: str,
         early_stopping: bool = True, patience: int = 10, tf_log_dir: str = './logs', mlflow_run: 'mlflow' = None,
         epochs: int = 100, train_epoch_steps: int = None, val_epoch_steps: int = None, create_loss_plot: bool = False,
     ):
@@ -17,7 +17,7 @@ class Trainer:
             model (tf.keras.Model): The TensorFlow model to be trained.
             train_data (tf.data.Dataset): The dataset for training.
             test_data (tf.data.Dataset): The dataset for validation.
-            best_model_path (str): Path to save the best model during training.
+            model_path (str): Path to save the best model during training.
             early_stopping (bool): Whether to use early stopping to stop training when validation loss stops improving.
                                    Defaults to True.
             patience (int): Number of epochs with no improvement in validation loss after which training will be stopped.
@@ -34,13 +34,13 @@ class Trainer:
         Attributes:
             steps_per_train_epoch (int): The number of steps to run in each training epoch. Calculated from the dataset if not provided.
             steps_per_validation_epoch (int): The number of steps to run in each validation epoch. Calculated from the dataset if not provided.
-            model_name (str): The name of the model, derived from the `best_model_path`.
+            model_name (str): The name of the model, derived from the `model_path`.
             create_loss_plot (bool): Whether to create a loss plot after training.
         """
         self.model = model
         self.train_data = train_data
         self.test_data = test_data
-        self.best_model_path = best_model_path
+        self.model_path = model_path
         self.epochs = epochs
         self.early_stopping = early_stopping
         self.patience = patience
@@ -48,7 +48,7 @@ class Trainer:
         self.mlflow_run = mlflow_run
         self.steps_per_train_epoch = train_epoch_steps
         self.steps_per_validation_epoch = val_epoch_steps
-        self.model_name = os.path.basename(os.path.normpath(self.best_model_path))
+        self.model_name = os.path.basename(os.path.normpath(self.model_path))
         self.create_loss_plot = create_loss_plot
 
     def train(self) -> tf.keras.Model:
@@ -81,9 +81,9 @@ class Trainer:
                 restore_best_weights=True
             ))
 
-        if self.best_model_path:
+        if self.model_path:
             callbacks.append(tf.keras.callbacks.ModelCheckpoint(
-                self.best_model_path,
+                self.model_path,
                 monitor='val_loss',
                 save_best_only=True,
                 mode='min'
@@ -99,7 +99,7 @@ class Trainer:
         )
 
         if self.mlflow_run:
-            self.mlflow_run.log_artifact(self.best_model_path, self.model_name)
+            self.mlflow_run.log_artifact(self.model_path, self.model_name)
 
         if self.create_loss_plot:
             train_loss = history.history['loss']

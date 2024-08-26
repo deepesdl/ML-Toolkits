@@ -47,7 +47,7 @@ class Trainer:
         self.train_data = train_data
         self.test_data = test_data
         self.optimizer = optimizer
-        self.best_model_path = model_path
+        self.model_path = model_path
         self.early_stopping = early_stopping
         self.patience = patience
         self.best_val_loss = float('inf')
@@ -58,7 +58,7 @@ class Trainer:
         self.device = device
         print(f"Using {self.device} device")
         self.mlflow_run = mlflow_run
-        self.model_name = os.path.basename(os.path.normpath(self.best_model_path))
+        self.model_name = os.path.basename(os.path.normpath(self.model_path))
         self.val_list = list()
         self.train_list = list()
         self.create_loss_plot = create_loss_plot
@@ -167,7 +167,7 @@ class Trainer:
             if val_loss < self.best_val_loss:
                 self.strikes = 0
                 self.best_val_loss = val_loss
-                torch.save(self.model.state_dict(), self.best_model_path)
+                torch.save(self.model.state_dict(), self.model_path)
                 print(f"New best model saved with validation loss: {val_loss}")
             else:
                 self.strikes += 1
@@ -177,7 +177,7 @@ class Trainer:
                 break
 
             # Load the best model weights at the end of training
-        self.model.load_state_dict(torch.load(self.best_model_path))
+        self.model.load_state_dict(torch.load(self.model_path))
         print("Loaded best model weights.")
         if self.mlflow_run:
             self.mlflow_run.pytorch.log_model(self.model, "model")
