@@ -9,11 +9,13 @@ from ml4xcube.utils import calculate_total_chunks, get_chunk_by_index
 
 
 class PTXrDataset(Dataset):
-    def __init__(self, ds: xr.Dataset, rand_chunk: bool = True, drop_nan: str = 'auto', drop_sample: bool = False,
-                 chunk_indices: List[int] = None, apply_mask: bool = True, fill_method: str = None,
-                 const: float = None, filter_var: str = 'filter_mask', num_chunks: int = None, callback = None,
-                 block_sizes: List[Tuple[str, int]] = None, sample_size: List[Tuple[str, int]] = None,
-                 overlap: List[Tuple[str, float]] = None, process_chunks: bool = False):
+    def __init__(
+        self, ds: xr.Dataset, rand_chunk: bool = True, drop_nan: str = 'auto', drop_sample: bool = False,
+         chunk_indices: List[int] = None, apply_mask: bool = True, fill_method: str = None,
+         const: float = None, filter_var: str = 'filter_mask', num_chunks: int = None, callback = None,
+         block_sizes: List[Tuple[str, int]] = None, sample_size: List[Tuple[str, int]] = None,
+         overlap: List[Tuple[str, float]] = None, process_chunks: bool = False
+    ):
         """
         Initializes a PyTorch-compatible dataset for efficiently managing and processing large xarray datasets,
         with support for chunking, filtering, and preprocessing.
@@ -22,9 +24,9 @@ class PTXrDataset(Dataset):
             ds (xr.Dataset): The input xarray dataset to process.
             rand_chunk (bool): If True, selects chunks randomly when no chunk indices are provided. Defaults to True.
             drop_nan (str): Specifies how to handle NaN values in the data. Defaults to 'auto'.
-                - 'auto': Drop the entire sample if any NaN values are present.
-                - 'if_all_nan': Drop the sample if all values are NaN.
-                - 'masked': Drop the subarray if valid values according to the mask are NaN.
+                If 'auto', drop the entire sample if any NaN values are present.
+                If 'if_all_nan', drop the sample if all values are NaN.
+                If 'masked', drop the subarray if valid values according to the mask are NaN.
             drop_sample (bool): If True, drops the entire subarray if any value in the subarray does not match the mask. Defaults to False.
             chunk_indices (List[int]): List of specific chunk indices to process. If None, chunks are selected randomly or sequentially. Defaults to None.
             apply_mask (bool): If True, applies a filter based on the specified `filter_var` to mask invalid data. Defaults to True.

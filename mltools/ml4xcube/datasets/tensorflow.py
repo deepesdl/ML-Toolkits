@@ -8,11 +8,13 @@ from ml4xcube.utils import get_chunk_by_index, calculate_total_chunks
 
 
 class TFXrDataset:
-    def __init__(self, ds: xr.Dataset, rand_chunk: bool = True, drop_nan: str = 'auto', chunk_indices: list = None,
-                 apply_mask: bool = True, drop_sample: bool = False, fill_method: str = None, const: float = None,
-                 filter_var: str = 'filter_mask', num_chunks: int = None, callback_fn = None,
-                 block_size: List[Tuple[str, int]] = None, sample_size: List[Tuple[str, int]] = None,
-                 overlap: List[Tuple[str, float]] = None, process_chunks: bool = False):
+    def __init__(
+        self, ds: xr.Dataset, rand_chunk: bool = True, drop_nan: str = 'auto', chunk_indices: list = None,
+        apply_mask: bool = True, drop_sample: bool = False, fill_method: str = None, const: float = None,
+        filter_var: str = 'filter_mask', num_chunks: int = None, callback_fn = None,
+        block_size: List[Tuple[str, int]] = None, sample_size: List[Tuple[str, int]] = None,
+        overlap: List[Tuple[str, float]] = None, process_chunks: bool = False
+    ):
         """
         Initialize the TensorFlow dataset.
 
