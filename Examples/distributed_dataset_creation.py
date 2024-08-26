@@ -3,36 +3,12 @@ import xarray as xr
 import dask.array as da
 from global_land_mask import globe
 from xcube.core.store import new_data_store
-from ml4xcube.data_split import assign_block_split
+from ml4xcube.splits import assign_block_split
+from ml4xcube.preprocessing import assign_mask
 from ml4xcube.datasets.multiproc_sampler import MultiProcSampler
-from ml4xcube.preprocessing import get_statistics, standardize, assign_mask
 
 
 """Before performing distributed machine learning, run this script in order to create the training and the test set."""
-
-
-# Initialize global variables to None
-at_stat = None
-lst_stat = None
-
-
-def standardize_data(chunk: xr.Dataset) -> xr.Dataset:
-    """
-    Standardize xarray chunks.
-
-    Args:
-        chunk (xr.Dataset): The data chunk to be standardized.
-
-    Returns:
-        xr.Dataset: The standardized data chunk.
-    """
-    global at_stat, lst_stat
-    print(at_stat)
-    print(lst_stat)
-    chunk['air_temperature_2m']       = standardize(chunk['air_temperature_2m'], *at_stat)
-    chunk['land_surface_temperature'] = standardize(chunk['land_surface_temperature'], *lst_stat)
-
-    return chunk
 
 
 def prepare_dataset_creation() -> xr.Dataset:
@@ -47,13 +23,6 @@ def prepare_dataset_creation() -> xr.Dataset:
     start_time = "2002-05-21"
     end_time   = "2002-08-01"
     ds = dataset[["land_surface_temperature", "air_temperature_2m"]].sel(time=slice(start_time, end_time))
-
-    global at_stat, lst_stat
-    at_stat  = get_statistics(ds, 'air_temperature_2m')
-    lst_stat = get_statistics(ds, 'land_surface_temperature')
-    print('Compute parameters for standardization:')
-    print(f'air_temperature_2m:       {at_stat}')
-    print(f'land_surface_temperature: {lst_stat}')
 
     # Create a land mask and assign land mask
     lon_grid, lat_grid = np.meshgrid(ds.lon, ds.lat)
@@ -83,7 +52,6 @@ def create_datasets(ds: xr.Dataset) -> None:
         nproc       = 5,
         chunk_batch = 10,
         data_fraq   = 0.01,
-        callback_fn = standardize_data
     ).get_datasets()
 
 
