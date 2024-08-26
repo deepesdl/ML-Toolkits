@@ -11,7 +11,7 @@ from ml4xcube.preprocessing import get_statistics, standardize, get_range, norma
 class XrDataset():
     def __init__(self, ds: xr.Dataset, chunk_indices: List[int] = None, rand_chunk: bool = True, drop_nan: str = 'auto',
                  apply_mask: bool = True, drop_sample: bool = False, fill_method: str = None, const: float = None,
-                 filter_var: str = 'land_mask', patience: int = 500, block_size: List[Tuple[str, int]] = None,
+                 filter_var: str = 'filter_mask', patience: int = 500, block_size: List[Tuple[str, int]] = None,
                  sample_size: List[Tuple[str, int]] = None, overlap: List[Tuple[str, int]] = None, callback: Callable = None,
                  num_chunks: int = None, to_pred: Union[str, List[str]] = None, scale_fn: str = 'standardize'):
         """
