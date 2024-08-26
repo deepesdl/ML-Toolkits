@@ -28,7 +28,7 @@ class Trainer:
     """
     def __init__(
         self, model: torch.nn.Module, train_data: DataLoader, test_data: DataLoader,
-        optimizer: torch.optim.Optimizer, save_every: int, best_model_path: str,
+        optimizer: torch.optim.Optimizer, model_path: str, save_every: int = 10,
         snapshot_path: str = None, early_stopping: bool = True, patience: int = 10,
         loss: Callable = None, metrics: Dict[str, Callable] = None, epochs: int = 10,
         validate_parallelism: bool = False, create_loss_plot: bool = False
@@ -41,8 +41,8 @@ class Trainer:
             train_data (DataLoader): DataLoader for the training data.
             test_data (DataLoader): DataLoader for the validation/test data.
             optimizer (torch.optim.Optimizer): Optimizer for training.
+            model_path (str): Path to save the best model.
             save_every (int): Frequency of saving training snapshots (in epochs).
-            best_model_path (str): Path to save the best model.
             snapshot_path (str): Path to save training snapshots. Defaults to None.
             early_stopping (bool): Enable or disable early stopping. Defaults to True.
             patience (int,): Number of epochs to wait for improvement before stopping early. Defaults to 10.
@@ -71,7 +71,7 @@ class Trainer:
         self.optimizer = optimizer
         self.save_every = save_every  # Frequency of saving training snapshots
         self.epochs_run = 0  # Tracks the number of epochs run
-        self.best_model_path = best_model_path # Path to best model computed in current training
+        self.model_path = model_path # Path to best model computed in current training
         self.snapshot_path = snapshot_path  # Path to save snapshots
         self.early_stopping = early_stopping  # Enables/disables early stopping
         self.patience = patience  # Number of epochs to wait before early stop if no progress on the validation set
@@ -243,7 +243,7 @@ class Trainer:
                 self.strikes = 0
                 self.best_val_loss = epoch_val_loss
                 # Saving the best ddp_model
-                torch.save(self.ddp_model.module.state_dict(), self.best_model_path)
+                torch.save(self.ddp_model.module.state_dict(), self.model_path)
                 if self.gpu_id == 0:
                     print(f"New best model saved with validation loss: {epoch_val_loss}")
             else:
@@ -260,9 +260,9 @@ class Trainer:
         if self.create_loss_plot:
             plot_loss(self.train_list, self.val_list)
 
-        # Load the best weights from best_model_path into self.model
+        # Load the best weights from model_path into self.model
         loc = f"cuda:{0}"
-        self.model.load_state_dict(torch.load(self.best_model_path, map_location=loc))
+        self.model.load_state_dict(torch.load(self.model_path, map_location=loc))
 
         print("Best model loaded.")
 
