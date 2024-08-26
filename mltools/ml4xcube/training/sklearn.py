@@ -12,11 +12,9 @@ class Trainer:
     """
 
     def __init__(
-        self,
-        model: BaseEstimator, train_data: Union[Any, Tuple[np.ndarray, np.ndarray]],
+        self, model: BaseEstimator, train_data: Union[Any, Tuple[np.ndarray, np.ndarray]],
         test_data: Union[Any, Tuple[np.ndarray, np.ndarray]] = None, metrics: Dict[str, Callable] = None,
-        model_path: str = None, batch_training: bool = False, mlflow_run: 'mlflow' = None,
-        task_type: str = 'supervised'
+        model_path: str = None, batch_training: bool = False, mlflow_run: 'mlflow' = None, task_type: str = 'supervised'
     ):
         """
         Initialize a Trainer object.
