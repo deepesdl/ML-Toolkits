@@ -101,7 +101,7 @@ class MultiProcSampler():
     def __init__(self, ds: xr.Dataset, rand_chunk: bool = False, data_fraq: float = 1.0, nproc: int = 4,
                  apply_mask: bool = True, drop_sample: bool = True, fill_method: str = None, const: float = None,
                  filter_var: str = 'filter_mask', chunk_size: Tuple[int, ...] = None, train_cube: str = 'train_cube.zarr',
-                 test_cube: str = 'test_cube.zarr', drop_nan: str = 'auto', array_dims: Tuple[str, ...] = ('samples',),
+                 test_cube: str = 'test_cube.zarr', drop_nan: str = 'auto', array_dims: Tuple[str, ...] = None,
                  data_split: float = 0.8, chunk_batch: int = None, callback: Callable = None,
                  block_size: List[Tuple[str, int]] = None, sample_size: List[Tuple[str, int]] = None,
                  overlap: List[Tuple[str, float]] = None, scale_fn: str = 'standardize'):
@@ -158,10 +158,13 @@ class MultiProcSampler():
         self.test_cube = test_cube
         self.drop_nan = drop_nan
 
-        sample_dims = set(dim[0] for dim in sample_size)
-        extra_dims = [dim for dim in array_dims if
-                      dim not in sample_dims]
-        self.array_dims = tuple(extra_dims) + tuple(dim for dim in array_dims if dim in sample_dims)
+        if array_dims is None:
+            sample_dims = set(dim[0] for dim in sample_size)
+            extra_dims = [dim for dim in array_dims if
+                          dim not in sample_dims]
+            self.array_dims = tuple(extra_dims) + tuple(dim for dim in array_dims if dim in sample_dims)
+        else:
+            self.array_dims = array_dims
 
         self.data_split = data_split
         self.callback = callback
