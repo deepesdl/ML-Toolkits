@@ -100,7 +100,7 @@ def worker_preprocess_chunk(args: Tuple) -> Tuple[Dict[str, np.ndarray], Dict[st
 class MultiProcSampler():
     def __init__(self, ds: xr.Dataset, rand_chunk: bool = False, data_fraq: float = 1.0, nproc: int = 4,
                  apply_mask: bool = True, drop_sample: bool = True, fill_method: str = None, const: float = None,
-                 filter_var: str = 'land_mask', chunk_size: Tuple[int, ...] = None, train_cube: str = 'train_cube.zarr',
+                 filter_var: str = 'filter_mask', chunk_size: Tuple[int, ...] = None, train_cube: str = 'train_cube.zarr',
                  test_cube: str = 'test_cube.zarr', drop_nan: str = 'auto', array_dims: Tuple[str, ...] = ('samples',),
                  data_split: float = 0.8, chunk_batch: int = None, callback: Callable = None,
                  block_size: List[Tuple[str, int]] = None, sample_size: List[Tuple[str, int]] = None,

@@ -11,7 +11,7 @@ from ml4xcube.utils import calculate_total_chunks, get_chunk_by_index
 class PTXrDataset(Dataset):
     def __init__(self, ds: xr.Dataset, rand_chunk: bool = True, drop_nan: str = 'auto', drop_sample: bool = False,
                  chunk_indices: List[int] = None, apply_mask: bool = True, fill_method: str = None,
-                 const: float = None, filter_var: str = 'land_mask', num_chunks: int = None, callback = None,
+                 const: float = None, filter_var: str = 'filter_mask', num_chunks: int = None, callback = None,
                  block_sizes: List[Tuple[str, int]] = None, sample_size: List[Tuple[str, int]] = None,
                  overlap: List[Tuple[str, float]] = None, process_chunks: bool = False):
         """
@@ -96,7 +96,9 @@ class PTXrDataset(Dataset):
         return chunk  # Return the processed chunk
 
 
-def prep_dataloader(train_ds: Dataset, test_ds: Dataset = None, batch_size: int = 1, callback: Callable = None, num_workers: int = 0, parallel: bool = False, shuffle = True, drop_last=True) -> Union[DataLoader, Tuple[DataLoader, DataLoader]]:
+def prep_dataloader(
+    train_ds: Dataset, test_ds: Dataset = None, batch_size: int = 1, callback: Callable = None, num_workers: int = 0,
+    parallel: bool = False, shuffle = True, drop_last=True) -> Union[DataLoader, Tuple[DataLoader, DataLoader]]:
     """
     Prepares a DataLoader for training and optionally testing.
 
