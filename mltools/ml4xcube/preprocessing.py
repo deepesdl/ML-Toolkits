@@ -5,7 +5,7 @@ from typing import Dict, List, Union
 from ml4xcube.utils import get_chunk_sizes
 
 
-def apply_filter(ds: Dict[str, np.ndarray], filter_var: str, drop_sample: bool = False) -> Dict[str, np.ndarray]:
+def apply_filter(ds: Dict[str, np.ndarray], filter_var: str = 'filter_mask', drop_sample: bool = False) -> Dict[str, np.ndarray]:
     """
     Apply a filter to the dataset. If drop_sample is True and any value in a subarray does not belong to the mask (False),
     drop the entire subarray. If drop_sample is False, set all values to NaN which do not belong to the mask (False).
@@ -109,7 +109,7 @@ def drop_nan_values(ds: Dict[str, np.ndarray], vars: List[str], mode: str = 'aut
     return ds
 
 
-def fill_nan_values(ds: Union[Dict[str, np.ndarray], xr.Dataset], vars: List[str], method: str = 'mean', const: float | str | bool = None) -> Union[Dict[str, np.ndarray], xr.Dataset]:
+def fill_nan_values(ds: Union[Dict[str, np.ndarray], xr.Dataset], vars: List[str], method: str = 'mean', const: Union[float, str, bool] = None) -> Union[Dict[str, np.ndarray], xr.Dataset]:
     """
     Fill NaN values in the dataset.
 
@@ -121,7 +121,7 @@ def fill_nan_values(ds: Union[Dict[str, np.ndarray], xr.Dataset], vars: List[str
             If 'mean', fill NaNs with the mean value of the non-NaN values.
             If 'noise', fill NaNs with random noise within the range of the non-NaN values.
             If 'constant', fill NaNs with the specified constant value.
-        const (float | str | bool): The constant value to use for filling when method is 'constant'.
+        const (Union[float, str, bool]): The constant value to use for filling when method is 'constant'.
 
     Returns:
         Dict[str, np.ndarray]: The dataset with NaN values filled.
