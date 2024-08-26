@@ -27,11 +27,11 @@ class Trainer:
     and periodic snapshot saving.
     """
     def __init__(
-            self, model: torch.nn.Module, train_data: DataLoader, test_data: DataLoader,
-            optimizer: torch.optim.Optimizer, save_every: int, best_model_path: str,
-            snapshot_path: str = None, early_stopping: bool = True, patience: int = 10,
-            loss: Callable = None, metrics: Dict[str, Callable] = None, epochs: int = 10,
-            validate_parallelism: bool = False, create_loss_plot: bool = False
+        self, model: torch.nn.Module, train_data: DataLoader, test_data: DataLoader,
+        optimizer: torch.optim.Optimizer, save_every: int, best_model_path: str,
+        snapshot_path: str = None, early_stopping: bool = True, patience: int = 10,
+        loss: Callable = None, metrics: Dict[str, Callable] = None, epochs: int = 10,
+        validate_parallelism: bool = False, create_loss_plot: bool = False
     ):
         """
         Initialize the Trainer for distributed training.
