@@ -10,12 +10,12 @@ class Trainer:
     A trainer class for training PyTorch models on single or no GPU systems.
     """
     def __init__(
-            self, model: torch.nn.Module, train_data: DataLoader, test_data: DataLoader,
-            optimizer: torch.optim.Optimizer, best_model_path: str,
-            early_stopping: bool = True, patience: int = 10, loss: Callable = None,
-            metrics: Dict[str, Callable] = None, epochs: int = 10, mlflow_run: 'mlflow' = None,
-            device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-            create_loss_plot: bool = False,
+        self, model: torch.nn.Module, train_data: DataLoader, test_data: DataLoader,
+        optimizer: torch.optim.Optimizer, model_path: str, early_stopping: bool = True,
+        patience: int = 10, loss: Callable = None, metrics: Dict[str, Callable] = None,
+        epochs: int = 10, mlflow_run: 'mlflow' = None,
+        device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        create_loss_plot: bool = False,
     ):
         """
         Initialize the Trainer.
@@ -25,7 +25,7 @@ class Trainer:
             train_data (DataLoader): DataLoader for the training data.
             test_data (DataLoader): DataLoader for the validation/test data.
             optimizer (torch.optim.Optimizer): Optimizer for training.
-            best_model_path (str): Path to save the best model.
+            model_path (str): Path to save the best model.
             early_stopping (bool): Enable or disable early stopping. Defaults to True.
             patience (int): Number of epochs to wait for improvement before stopping early. Defaults to 10.
             loss (Callable): Loss function used during training.
@@ -39,7 +39,7 @@ class Trainer:
             best_val_loss (float): The best validation loss encountered during training, initialized to infinity.
             strikes (int): Counter tracking the number of consecutive epochs without validation loss improvement.
             device (torch.device): The device (CPU or GPU) used for training.
-            model_name (str): The name of the model file, extracted from the `best_model_path`.
+            model_name (str): The name of the model file, extracted from the `model_path`.
             val_list (List[float]): List to store validation loss values for each epoch.
             train_list (List[float]): List to store training loss values for each epoch.
         """
@@ -47,7 +47,7 @@ class Trainer:
         self.train_data = train_data
         self.test_data = test_data
         self.optimizer = optimizer
-        self.best_model_path = best_model_path
+        self.best_model_path = model_path
         self.early_stopping = early_stopping
         self.patience = patience
         self.best_val_loss = float('inf')
@@ -56,6 +56,7 @@ class Trainer:
         self.metrics = metrics
         self.epochs = epochs
         self.device = device
+        print(f"Using {self.device} device")
         self.mlflow_run = mlflow_run
         self.model_name = os.path.basename(os.path.normpath(self.best_model_path))
         self.val_list = list()
@@ -74,6 +75,7 @@ class Trainer:
             float: The loss value for the batch.
         """
         inputs, targets = inputs.to(self.device), targets.to(self.device)
+
         self.optimizer.zero_grad()
         outputs = self.model(inputs)
         loss = self.loss(outputs, targets)
@@ -124,6 +126,7 @@ class Trainer:
             metric_sums = {name: 0.0 for name in self.metrics.keys()}
         for batch in self.test_data:
             inputs, targets = batch
+            inputs, targets = inputs.to(self.device), targets.to(self.device)
             if inputs.numel() == 0: continue
             with torch.no_grad():
                 outputs = self.model(inputs)
