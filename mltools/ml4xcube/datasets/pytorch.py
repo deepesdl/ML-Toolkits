@@ -17,20 +17,24 @@ class PTXrDataset(Dataset):
          overlap: List[Tuple[str, float]] = None, process_chunks: bool = False
     ):
         """
-        Initializes a PyTorch-compatible dataset for efficiently managing and processing large xarray datasets,
+        Initializes a PyTorch-compatible dataset for efficiently managing and processing xarray datasets,
         with support for chunking, filtering, and preprocessing.
 
         Args:
             ds (xr.Dataset): The input xarray dataset to process.
             rand_chunk (bool): If True, selects chunks randomly when no chunk indices are provided. Defaults to True.
             drop_nan (str): Specifies how to handle NaN values in the data. Defaults to 'auto'.
-                If 'auto', drop the entire sample if any NaN values are present.
-                If 'if_all_nan', drop the sample if all values are NaN.
-                If 'masked', drop the subarray if valid values according to the mask are NaN.
-            drop_sample (bool): If True, drops the entire subarray if any value in the subarray does not match the mask. Defaults to False.
+                If 'auto': Drop the entire sample if any NaN values are present.
+                If 'if_all_nan': Drop the sample if all values are NaN.
+                If 'masked': Drop the subarray if valid values according to the mask are NaN.
+            drop_sample (bool): If true, NaN values are dropped during filter application.
             chunk_indices (List[int]): List of specific chunk indices to process. If None, chunks are selected randomly or sequentially. Defaults to None.
             apply_mask (bool): If True, applies a filter based on the specified `filter_var` to mask invalid data. Defaults to True.
-            fill_method (str): The method used to fill masked data, such as 'ffill' (forward fill) or 'bfill' (backward fill). Defaults to None.
+            fill_method (str): Method to fill masked data, if any. Defaults to None.
+                If 'sample_mean', fill NaNs with the sample mean value.
+                If 'mean', fill NaNs with the mean value of the non-NaN values.
+                If 'noise', fill NaNs with random noise within the range of the non-NaN values.
+                If 'constant', fill NaNs with the specified constant value.
             const (float): A constant value to fill masked data if no fill method is provided. Defaults to None.
             filter_var (str): The variable used to filter the data, typically a mask (e.g., 'land_mask'). Defaults to 'land_mask'.
             num_chunks (int): The number of chunks to process. If None, all chunks will be processed. Defaults to None.

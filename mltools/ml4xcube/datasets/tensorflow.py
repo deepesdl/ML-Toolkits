@@ -9,7 +9,7 @@ from ml4xcube.utils import get_chunk_by_index, calculate_total_chunks
 
 class TFXrDataset:
     def __init__(
-        self, ds: xr.Dataset, rand_chunk: bool = True, drop_nan: str = 'auto', chunk_indices: list = None,
+        self, ds: xr.Dataset, rand_chunk: bool = True, drop_nan: str = 'auto', chunk_indices: List[int] = None,
         apply_mask: bool = True, drop_sample: bool = False, fill_method: str = None, const: float = None,
         filter_var: str = 'filter_mask', num_chunks: int = None, callback_fn = None,
         block_size: List[Tuple[str, int]] = None, sample_size: List[Tuple[str, int]] = None,
@@ -18,16 +18,21 @@ class TFXrDataset:
         """
         Initialize the TensorFlow dataset.
 
-        Attributes:
+        Args:
             ds (xr.Dataset): The xarray dataset.
             rand_chunk (bool): Whether to select chunks randomly.
             drop_nan (str): Defines the means by which areas with missing values are dropped
                 If 'auto', drop the entire sample if any NaN is contained.
                 If 'if_all_nan', drop the sample if entirely NaN.
                 If 'masked', drop the entire subarray if valid values according to mask are NaN.
+            chunk_indices (List[int]): List of specific chunk indices to process. If None, chunks are selected randomly or sequentially. Defaults to None.
             apply_mask (bool): If true, apply the filter based on the specified filter_var.
-            drop_sample (bool): If true, drop the entire subarray if any value in the subarray does not belong to the mask (False).
+            drop_sample (bool): If true, NaN values are dropped during filter application.
             fill_method (str): Method to fill masked data, if any.
+                If 'sample_mean', fill NaNs with the sample mean value.
+                If 'mean', fill NaNs with the mean value of the non-NaN values.
+                If 'noise', fill NaNs with random noise within the range of the non-NaN values.
+                If 'constant', fill NaNs with the specified constant value.
             const (float): Constant value to use for filling masked data, if needed.
             filter_var (str): Filtering variable name.
             num_chunks (int): Number of chunks to process dynamically.
@@ -35,9 +40,10 @@ class TFXrDataset:
             block_size (List[Tuple[str, int]]): Block sizes for considered blocks (of (sub-)chunks).
             sample_size (ist[Tuple[str, int]]): Sample size for chunk splitting.
             overlap (List[Tuple[str, float]]): Percentage of overlap for samples due to chunk splitting.
+            process_chunks (bool): Defines whether chunk processing is necessary.
+
+        Attributes
             total_chunks (int): Total number of chunks in the dataset.
-            chunk_indices (List[int]): List of indices specifying which chunks to process.
-            process chunk (bool): Defines whether chunk processing is necessary.
         """
         self.ds = ds
         self.rand_chunk = rand_chunk

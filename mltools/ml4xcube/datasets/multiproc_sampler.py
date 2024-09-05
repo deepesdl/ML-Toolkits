@@ -118,8 +118,12 @@ class MultiProcSampler:
             data_fraq (float): The fraction of the dataset to process, where 1.0 means the entire dataset. Defaults to 1.0.
             nproc (int): The number of processes to use for parallel processing. Defaults to 4.
             apply_mask (bool): Whether to apply a mask based on the `filter_var`. Defaults to True.
-            drop_sample (bool): Whether to drop an entire subarray if any value does not belong to the mask. Defaults to True.
-            fill_method (str): The method to fill masked data, if any (e.g., 'ffill', 'bfill'). Defaults to None.
+            drop_sample (bool): If true, NaN values are dropped during filter application.
+            fill_method (str): The method to fill masked data. Defaults to None.
+                If 'sample_mean', fill NaNs with the sample mean value.
+                If 'mean', fill NaNs with the mean value of the non-NaN values.
+                If 'noise', fill NaNs with random noise within the range of the non-NaN values.
+                If 'constant', fill NaNs with the specified constant value.
             const (float): A constant value to fill masked data if `fill_method` is not provided. Defaults to None.
             filter_var (str): The variable name to use for filtering invalid data (e.g., 'land_mask'). Defaults to 'land_mask'.
             chunk_size (Tuple[int]): The size of chunks to generate for training and testing data. Defaults to None, which will automatically determine chunk sizes.

@@ -28,17 +28,21 @@ class XrDataset:
                 If 'if_all_nan', drop the sample if all values are NaN.
                 If 'masked', drop the entire subarray if valid values according to the mask are NaN.
             apply_mask (bool): If True, apply a mask based on the filter_var to filter out invalid data. Defaults to True.
-            drop_sample (bool): If True, drop the entire subarray if any value does not belong to the mask. Defaults to False.
-            fill_method (str): The method to fill masked data, such as 'ffill' or 'bfill'. Defaults to None.
+            drop_sample (bool): If true, NaN values are dropped during filter application.
+            fill_method (str): The method to fill masked data. Defaults to None.
+                If 'sample_mean', fill NaNs with the sample mean value.
+                If 'mean', fill NaNs with the mean value of the non-NaN values.
+                If 'noise', fill NaNs with random noise within the range of the non-NaN values.
+                If 'constant', fill NaNs with the specified constant value.
             const (float): Constant value to fill masked data if fill_method is not specified. Defaults to None.
             filter_var (str): The variable containing the mask used for filtering invalid data (e.g., 'land_mask'). Defaults to 'land_mask'.
             patience (int): The number of consecutive iterations without finding a valid chunk before stopping the chunk retrieval process. Defaults to 500.
             block_size (List[Tuple[str, int]]): The block sizes for splitting the dataset into chunks. Each tuple contains the dimension name and block size. Defaults to None.
             sample_size (List[Tuple[str, int]]): The size of samples extracted from chunks, specified as a list of tuples with dimension names and sample sizes. Defaults to None.
-            overlap (List[Tuple[str, int]]): Overlap size for creating overlapping samples from chunks. Each tuple contains the dimension name and overlap size. Defaults to None.
+            overlap (List[Tuple[str, float]]): Overlap size for creating overlapping samples from chunks. Each tuple contains the dimension name and overlap size. Defaults to None.
             callback (Callable): An optional callback function to apply additional processing to each chunk. Defaults to None.
             num_chunks (int): The number of unique chunks to process. If None, all chunks in the dataset will be processed. Defaults to None.
-            to_pred (str | List[str]): The target variable(s) to predict. Used to split the dataset into features and target variables. Defaults to None.
+            to_pred (Union[str, List[str]]): The target variable(s) to predict. Used to split the dataset into features and target variables. Defaults to None.
             scale_fn (str): The scaling function to apply to the dataset.
                 If 'standardize', standardization of the data is conducted.
                 If 'normalize', the data is normalized.
