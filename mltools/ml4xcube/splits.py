@@ -83,6 +83,8 @@ def create_split(
         exclude_vars (str): Variable names to exclude from the features.
         feature_vars (List[str]): List of feature variable names. If None, will be determined automatically.
         stack_axis (int): Axis along which to stack the feature and target variables (default is -1).
+        filter_var (str): Name of the variable used for masking or filtering (default is 'filter_mask').
+            This is used to automatically exclude filtered data from the training and the test set.
 
     Returns:
         Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: Training and testing sets for features and targets.
