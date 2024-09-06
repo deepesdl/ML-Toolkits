@@ -1,5 +1,5 @@
 {% set name = "ml4xcube" %}
-{% set version = "1.0.1" %}
+{% set version = "1.1.0" %}
 
 package:
   name: {{ name|lower }}
@@ -7,7 +7,7 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/ml4xcube-{{ version }}.tar.gz
-  sha256: 71940469581071621384ba9b9f6ff89e4494612595de4392c4f6932c8741fb3c
+  sha256: 6a61432b4878f7ac45fe59ff3b5e8859f096e8c7b32d8be8d03b95cf88c446d5
 
 build:
   noarch: python
@@ -28,7 +28,7 @@ requirements:
     - xarray >2023.8.0
     - zarr >2.11
     - rechunker >=0.5.1
-    -
+
 test:
   imports:
     - ml4xcube
