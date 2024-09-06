@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='ml4xcube',
-    version='1.0.1',
+    version='1.1.0',
     package_dir={'': 'mltools'},
     packages=find_packages(where='mltools'),
     package_data={

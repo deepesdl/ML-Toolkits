@@ -2,7 +2,7 @@ import os
 import joblib
 import numpy as np
 from sklearn.base import BaseEstimator
-from typing import Union, Tuple, Optional, Callable, List, Any
+from typing import Union, Tuple, Optional, Callable, Dict, Any
 
 
 class Trainer:
@@ -12,16 +12,10 @@ class Trainer:
     """
 
     def __init__(
-            self,
-            model: BaseEstimator,
-            train_data: Union[Any, Tuple[np.ndarray, np.ndarray]],
-            test_data: Union[Any, Tuple[np.ndarray, np.ndarray]] = None,
-            metrics: List[Callable] = None,
-            model_path: str = None,
-            batch_training: bool = False,
-            mlflow_run=None,
-            task_type: str = 'supervised'
-        ):
+        self, model: BaseEstimator, train_data: Union[Any, Tuple[np.ndarray, np.ndarray]],
+        test_data: Union[Any, Tuple[np.ndarray, np.ndarray]] = None, metrics: Dict[str, Callable] = None,
+        model_path: str = None, batch_training: bool = False, mlflow_run: 'mlflow' = None, task_type: str = 'supervised'
+    ):
         """
         Initialize a Trainer object.
 
@@ -29,10 +23,10 @@ class Trainer:
             model (BaseEstimator): A scikit-learn estimator that supports partial_fit.
             train_data (Union[DataLoader, Tuple[np.ndarray, np.ndarray]]): PyTorch DataLoader for batch training or a tuple of numpy arrays (X_train, y_train).
             test_data (Union[DataLoader, Tuple[np.ndarray, np.ndarray]]): PyTorch DataLoader for batch validation/testing or a tuple of numpy arrays (X_test, y_test).
-            metrics (List[Callable]): A list of functions that compute a metric between predictions and true values.
+            metrics (Dict[str, Callable]): A list of functions that compute a metric between predictions and true values.
             model_path (str): Path to save the best model.
             batch_training (bool): Whether to use batch training; if False, the model will be trained on complete data at once.
-            mlflow_run: An MLflow run instance to log training and validation metrics.
+            mlflow_run (mlflow): An MLflow run instance to log training and validation metrics.
             task_type (str): The type of task, either 'supervised' or 'unsupervised'.
         """
         self.model = model

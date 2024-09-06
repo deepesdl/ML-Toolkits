@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import xarray as xr
 from tqdm import tqdm
-from ml4xcube.cube_utilities import get_dim_range
+from ml4xcube.utils import get_dim_range
 
 """
 Function get_insights(cube):
@@ -69,15 +69,22 @@ def get_insights(cube: xr.DataArray, variable: str, layer_dim: str = None) -> No
     dim2_min, dim2_max = get_dim_range(cube, dim2)
     dim3_min, dim3_max = get_dim_range(cube, dim3)
 
+    if isinstance(dim1_min, (int, float)):
+        dim1_min = round(dim1_min, 3)
+        dim1_max = round(dim1_max, 3)
+    if isinstance(dim2_min, (int, float)):
+        dim2_min = round(dim2_min, 3)
+        dim2_max = round(dim2_max, 3)
+    if isinstance(dim3_min, (int, float)):
+        dim3_min = round(dim3_min, 3)
+        dim3_max = round(dim3_max, 3)
 
     # Calculating the size of the data cube and each layer
     cube_size = size_values[0]*size_values[1]*size_values[2]
     layer_size = sizes[layer_coord1] * sizes[layer_coord2]
 
-    cube = cube[variable]
-
     # Calculating the number and percentage of NaN values (gaps) in the entire cube
-    gap_values = np.sum(np.isnan(cube)).values.item()
+    gap_values = np.sum(np.isnan(cube)).values
     gap_values_percentage = round(gap_values / cube_size, 2)
 
     # Calculating the minimum and maximum values in the data cube, ignoring NaNs
@@ -93,7 +100,7 @@ def get_insights(cube: xr.DataArray, variable: str, layer_dim: str = None) -> No
         for i in range(cube.sizes[layer_dim]):
             c = cube.isel({layer_dim: i})
             # Calculating the absolute and relative gap size for the current layer
-            c_gap_absolute = np.sum(np.isnan(c)).values.item()
+            c_gap_absolute = np.sum(np.isnan(c)).values
             c_gap_size = round(c_gap_absolute / layer_size, 2)
 
             # Updating max_gap and min_gap if the current layer's gap size is greater or smaller respectively
@@ -116,9 +123,9 @@ def get_insights(cube: xr.DataArray, variable: str, layer_dim: str = None) -> No
     print(" ")
     print(f"{'Variable:':<25} {variable}")
     print(f"{'Shape:':<25} ({dim1}: {size_values[0]}, {dim2}: {size_values[1]}, {dim3}: {size_values[2]})")
-    print(f"{dim1_long_name + ' range:':<25} {round(dim1_min, 3)} - {round(dim1_max, 3)}")
-    print(f"{dim2_long_name + ' range:':<25} {round(dim2_min, 3)} - {round(dim2_max, 3)}")
-    print(f"{dim3_long_name + ' range:':<25} {round(dim3_min, 3)} - {round(dim3_max, 3)}")
+    print(f"{dim1_long_name + ' range:':<25} {dim1_min} - {dim1_max}")
+    print(f"{dim2_long_name + ' range:':<25} {dim2_min} - {dim2_max}")
+    print(f"{dim3_long_name + ' range:':<25} {dim3_min} - {dim3_max}")
     print(f"{'Total size:':<25} {cube_size:,}")
     print(f"{'Size of each layer:':<25} {layer_size:,}")
     print(f"{'Total gap size:':<25} {gap_values} -> {int(gap_values_percentage * 100)} %")

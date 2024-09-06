@@ -10,54 +10,55 @@ class Trainer:
     A trainer class for training PyTorch models on single or no GPU systems.
     """
     def __init__(
-            self,
-            model: torch.nn.Module,
-            train_data: DataLoader,
-            test_data: DataLoader,
-            optimizer: torch.optim.Optimizer,
-            best_model_path: str,
-            early_stopping: bool = True,
-            patience: int = 10,
-            loss: Callable = None,
-            metrics: Dict[str, Callable] = None,
-            epochs: int = 10,
-            mlflow_run=None,
-            device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-            create_loss_plot: bool = False,
+        self, model: torch.nn.Module, train_data: DataLoader, test_data: DataLoader,
+        optimizer: torch.optim.Optimizer, model_path: str, early_stopping: bool = True,
+        patience: int = 10, loss: Callable = None, metrics: Dict[str, Callable] = None,
+        epochs: int = 10, mlflow_run: 'mlflow' = None,
+        device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        create_loss_plot: bool = False,
     ):
         """
         Initialize the Trainer.
 
-        Attributes:
+        Args:
             model (torch.nn.Module): The PyTorch model to train.
             train_data (DataLoader): DataLoader for the training data.
             test_data (DataLoader): DataLoader for the validation/test data.
             optimizer (torch.optim.Optimizer): Optimizer for training.
-            best_model_path (str): Path to save the best model.
+            model_path (str): Path to save the best model.
             early_stopping (bool): Enable or disable early stopping. Defaults to True.
-            patience (int): Number of epochs to wait for improvement before stopping early.
-            loss (torch.nn.Module): Loss function.
-            metrics (Dict[str, Callable]): Dictionary of metrics to evaluate, with metric names as keys and metric functions as values.
-            epochs (int): Number of training epochs.
-            mlflow_run: An MLflow run instance to log training and validation metrics.
-            device (torch.device): Device to run the training on.
-            create_loss_plot (bool): Whether to create a plot of training and validation loss.
+            patience (int): Number of epochs to wait for improvement before stopping early. Defaults to 10.
+            loss (Callable): Loss function used during training.
+            metrics (Dict[str, Callable]): Dictionary of metrics to evaluate during validation, with metric names as keys and metric functions as values.
+            epochs (int): Number of training epochs. Defaults to 10.
+            mlflow_run (mlflow): An MLflow run instance to log training and validation metrics. Defaults to None.
+            device (torch.device): Device to run the training on (CPU or GPU). Defaults to the best available device.
+            create_loss_plot (bool): Whether to create a plot of training and validation loss after training. Defaults to False.
+
+        Attributes:
+            best_val_loss (float): The best validation loss encountered during training, initialized to infinity.
+            strikes (int): Counter tracking the number of consecutive epochs without validation loss improvement.
+            device (torch.device): The device (CPU or GPU) used for training.
+            model_name (str): The name of the model file, extracted from the `model_path`.
+            val_list (List[float]): List to store validation loss values for each epoch.
+            train_list (List[float]): List to store training loss values for each epoch.
         """
         self.model = model.to(device)
         self.train_data = train_data
         self.test_data = test_data
         self.optimizer = optimizer
-        self.best_model_path = best_model_path
+        self.model_path = model_path
         self.early_stopping = early_stopping
         self.patience = patience
         self.best_val_loss = float('inf')
         self.strikes = 0
         self.loss = loss
         self.metrics = metrics
-        self.max_epochs = epochs
+        self.epochs = epochs
         self.device = device
+        print(f"Using {self.device} device")
         self.mlflow_run = mlflow_run
-        self.model_name = os.path.basename(os.path.normpath(self.best_model_path))
+        self.model_name = os.path.basename(os.path.normpath(self.model_path))
         self.val_list = list()
         self.train_list = list()
         self.create_loss_plot = create_loss_plot
@@ -74,6 +75,7 @@ class Trainer:
             float: The loss value for the batch.
         """
         inputs, targets = inputs.to(self.device), targets.to(self.device)
+
         self.optimizer.zero_grad()
         outputs = self.model(inputs)
         loss = self.loss(outputs, targets)
@@ -124,6 +126,7 @@ class Trainer:
             metric_sums = {name: 0.0 for name in self.metrics.keys()}
         for batch in self.test_data:
             inputs, targets = batch
+            inputs, targets = inputs.to(self.device), targets.to(self.device)
             if inputs.numel() == 0: continue
             with torch.no_grad():
                 outputs = self.model(inputs)
@@ -157,14 +160,14 @@ class Trainer:
         Returns:
             torch.nn.Module: The trained model.
         """
-        for epoch in range(self.max_epochs):
+        for epoch in range(self.epochs):
             self._run_epoch(epoch)
             val_loss = self._validate(epoch)
 
             if val_loss < self.best_val_loss:
                 self.strikes = 0
                 self.best_val_loss = val_loss
-                torch.save(self.model.state_dict(), self.best_model_path)
+                torch.save(self.model.state_dict(), self.model_path)
                 print(f"New best model saved with validation loss: {val_loss}")
             else:
                 self.strikes += 1
@@ -174,7 +177,7 @@ class Trainer:
                 break
 
             # Load the best model weights at the end of training
-        self.model.load_state_dict(torch.load(self.best_model_path))
+        self.model.load_state_dict(torch.load(self.model_path))
         print("Loaded best model weights.")
         if self.mlflow_run:
             self.mlflow_run.pytorch.log_model(self.model, "model")

@@ -15,23 +15,26 @@ If requested artificial gaps can be inserted in the array.
 
 
 class GapDataset:
-    def __init__(self, ds: xr.DataArray, ds_name: str = 'Test123',
-                 dimensions: Dict[str, tuple] = None,
-                 artificial_gaps: List[float] = None,
-                 actual_matrix: Union[str, datetime.date] = 'Random',
-                 predictor_path: str = None, layer_dim: str = 'time'):
+    def __init__(
+        self, ds: xr.DataArray, ds_name: str = 'Test123', dimensions: Dict[str, tuple] = None,
+        artificial_gaps: List[float] = None, actual_matrix: Union[str, datetime.date] = 'Random',
+        predictor_path: str = None, layer_dim: str = 'time'
+    ):
         """
         Represents a dataset for handling data gaps.
 
-        Attributes:
+        Args:
             ds (xr.DataArray): The original dataset that might be sliced later on.
             ds_name (str): The name of the dataset.
             dimensions (Dict[str, tuple]): Dict containing dimension ranges (e.g. lat, lon, times); no slicing if no dim specified.
             artificial_gaps (List[float]): List of artificial gap sizes; None if no artificial gaps should be created.
             actual_matrix (Union[str, datetime.date]): Specifies the actual data matrix or 'Random' for random selection.
+            predictor_path (str): File that contains
+            layer_dim (str): The name of the layer dimension (e.g., 'time', 'depth') in the dataset. Defaults to 'time'.
+
+        Attributes:
             directory (str): The directory where data will be stored.
             extra_data (xr.DataArray): Additional data used as predictors (e.g. Land Cover Classes).
-            sliced_ds (xr.DataArray): The sliced dataset.
         """
         self.ds = ds
         self.ds_name = ds_name
@@ -42,7 +45,6 @@ class GapDataset:
         self.directory = os.path.dirname(os.getcwd()) + '/application_results/' + ds_name + "/" if \
             os.getcwd().split('/')[-1] != 'gapfilling' else 'application_results/' + ds_name + "/"
         self.extra_data = None
-        self.sliced_ds = None
         self.layer_dim = layer_dim
 
     def get_data(self) -> None:

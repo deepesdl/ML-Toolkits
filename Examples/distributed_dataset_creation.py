@@ -3,33 +3,12 @@ import xarray as xr
 import dask.array as da
 from global_land_mask import globe
 from xcube.core.store import new_data_store
-from ml4xcube.cube_utilities import get_chunk_sizes
-from ml4xcube.preprocessing import get_statistics, standardize
+from ml4xcube.splits import assign_block_split
+from ml4xcube.preprocessing import assign_mask
 from ml4xcube.datasets.multiproc_sampler import MultiProcSampler
 
 
-# Initialize global variables to None
-at_stat = None
-lst_stat = None
-
-
-def standardize_data(chunk: xr.Dataset) -> xr.Dataset:
-    """
-    Standardize xarray chunks.
-
-    Args:
-        chunk (xr.Dataset): The data chunk to be standardized.
-
-    Returns:
-        xr.Dataset: The standardized data chunk.
-    """
-    global at_stat, lst_stat
-    print(at_stat)
-    print(lst_stat)
-    chunk['air_temperature_2m']       = standardize(chunk['air_temperature_2m'], *at_stat)
-    chunk['land_surface_temperature'] = standardize(chunk['land_surface_temperature'], *lst_stat)
-
-    return chunk
+"""Before performing distributed machine learning, run this script in order to create the training and the test set."""
 
 
 def prepare_dataset_creation() -> xr.Dataset:
@@ -45,20 +24,16 @@ def prepare_dataset_creation() -> xr.Dataset:
     end_time   = "2002-08-01"
     ds = dataset[["land_surface_temperature", "air_temperature_2m"]].sel(time=slice(start_time, end_time))
 
-    global at_stat, lst_stat
-    at_stat  = get_statistics(ds, 'air_temperature_2m')
-    lst_stat = get_statistics(ds, 'land_surface_temperature')
-    print('Compute parameters for standardization:')
-    print(f'air_temperature_2m:       {at_stat}')
-    print(f'land_surface_temperature: {lst_stat}')
-
-    # Create a land mask
+    # Create a land mask and assign land mask
     lon_grid, lat_grid = np.meshgrid(ds.lon, ds.lat)
-    lm0                = da.from_array(globe.is_land(lat_grid, lon_grid))
-    lm                 = da.stack([lm0 for _ in range(ds.dims['time'])], axis=0)
+    land_mask          = da.from_array(globe.is_land(lat_grid, lon_grid))
+    ds                 = assign_mask(ds, land_mask, 'land_mask', 'time')
 
-    # Assign land mask to the dataset
-    ds = ds.assign(land_mask=(['time', 'lat', 'lon'], lm.rechunk(chunks=([v for _, v in get_chunk_sizes(ds)]))))
+    xds = assign_block_split(
+        ds=ds,
+        block_size=[("time", 12), ("lat", 135), ("lon", 135)],
+        split=0.7
+    )
     return ds
 
 
@@ -72,12 +47,14 @@ def create_datasets(ds: xr.Dataset) -> None:
     # Preprocess data and split into training and testing sets
     train_set, test_set = MultiProcSampler(
         ds          = ds,
-        train_cube  = 'train_cube_std.zarr',
-        test_cube   = 'test_cube_std.zarr',
+        train_cube  = 'train_cube.zarr',
+        test_cube   = 'test_cube.zarr',
         nproc       = 5,
         chunk_batch = 10,
         data_fraq   = 0.01,
-        callback_fn = standardize_data
+        array_dims  = ('samples', ),
+        chunk_size  = (1,),
+        scale_fn    = None
     ).get_datasets()
 
 

@@ -6,7 +6,7 @@ from scipy.ndimage import binary_erosion, binary_dilation
 
 
 def plot_slice(
-    ds: xr.DataArray, var_to_plot: str, xdim: str, ydim: str, filter_var: str ='land_mask', title: str ='Slice Plot',
+    ds: xr.DataArray, var_to_plot: str, xdim: str, ydim: str, filter_var: str ='filter_mask', title: str ='Slice Plot',
     label: str ='Cube Slice', color_map: str ='viridis', xlabel: str ='Longitude', ylabel: str ='Latitude',
     save_fig: bool = False, file_name: str ='plot.png', fig_size: Tuple[int, int] =(15, 10), vmin: float = None,
     vmax: float = None, ticks: List[float] = None
