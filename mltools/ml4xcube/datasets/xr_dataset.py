@@ -85,7 +85,6 @@ class XrDataset:
             self.dataset = self.callback(self.dataset)
         if self.scale_fn is not None:
             self.scale_dataset()
-            print(self.dataset)
         if self.to_pred is not None:
             self.dataset = self.split_dataset()
 
@@ -112,9 +111,14 @@ class XrDataset:
                 - (X_train, y_train): Training features and targets.
                 - (X_test, y_test): Testing features and targets.
         """
+        stack_axis = -1
+        if self.sample_size is not None: stack_axis = 1
+
         X_train, X_test, y_train, y_test = create_split(
-            data    = self.dataset,
-            to_pred = self.to_pred
+            data       = self.dataset,
+            to_pred    = self.to_pred,
+            filter_var = self.filter_var,
+            stack_axis = stack_axis
         )
 
         train_data, test_data = (X_train, y_train), (X_test, y_test)

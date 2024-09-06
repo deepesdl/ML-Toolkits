@@ -5,6 +5,7 @@ import xarray as xr
 import dask.array as da
 from typing import Tuple, List, Union, Dict
 from ml4xcube.utils import get_chunk_sizes
+from ml4xcube.preprocessing import drop_nan_values
 warnings.filterwarnings('ignore')
 
 
@@ -70,7 +71,8 @@ def assign_block_split(ds: xr.Dataset, block_size: List[Tuple[str, int]] = None,
 
 def create_split(
         data: Union[xr.Dataset, Dict[str, np.ndarray]], to_pred: Union[List[str], str] = None,
-        exclude_vars: List[str] = list(), feature_vars: List[str] = None, stack_axis: int = -1
+        exclude_vars: List[str] = list(), feature_vars: List[str] = None, stack_axis: int = -1,
+        filter_var: str = 'filter_mask'
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Create a train-test split for the given feature variables and target variables using the 'split' variable.
@@ -87,12 +89,18 @@ def create_split(
     """
     if isinstance(data, xr.Dataset):
         data_vars = list(data.data_vars)
-        get_values = lambda var: data[var].values
     elif isinstance(data, dict):
         data_vars = list(data.keys())
-        get_values = lambda var: data[var]
     else:
         raise TypeError("Input data must be an xarray.Dataset or a dictionary.")
+
+    train_mask, test_mask = data['split'] == True, data['split'] == False
+
+    train_data = {var: np.ma.masked_where(~train_mask, data[var]).filled(np.nan) for var in data if var != 'split'}
+    test_data  = {var: np.ma.masked_where(~test_mask, data[var]).filled(np.nan) for var in data if var != 'split'}
+
+    train_data = drop_nan_values(train_data, data_vars, 'if_all_nan', filter_var)
+    test_data  = drop_nan_values(test_data, data_vars, 'if_all_nan', filter_var)
 
     if isinstance(to_pred, str): to_pred = [to_pred]
 
@@ -103,20 +111,15 @@ def create_split(
     # Determine feature variables if not provided
     if feature_vars is None:
         feature_vars = [var for var in data_vars if
-                        var not in to_pred + ['split', 'filter_mask'] + exclude_vars]
+                        var not in to_pred + ['split', filter_var] + exclude_vars]
 
     # Stack feature variables along the specified axis
-    X = np.stack([get_values(var) for var in feature_vars], axis=stack_axis)
+    X_train = np.stack([train_data[var] for var in feature_vars], axis=stack_axis)
+    X_test  = np.stack([test_data[var] for var in feature_vars], axis=stack_axis)
 
     # Stack target variables along the specified axis
-    y = np.stack([get_values(var) for var in to_pred], axis=stack_axis)
-
-    split = get_values('split')
-
-    X_train = X[split == 1]
-    X_test = X[split == 0]
-    y_train = y[split == 1]
-    y_test = y[split == 0]
+    y_train = np.stack([train_data[var] for var in to_pred], axis=stack_axis)
+    y_test  = np.stack([test_data[var] for var in to_pred], axis=stack_axis)
 
     return X_train, X_test, y_train, y_test
 
