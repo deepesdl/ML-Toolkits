@@ -52,7 +52,9 @@ def create_datasets(ds: xr.Dataset) -> None:
         nproc       = 5,
         chunk_batch = 10,
         data_fraq   = 0.01,
-        array_dims  = ('samples', )
+        array_dims  = ('samples', ),
+        chunk_size  = (1,),
+        scale_fn    = None
     ).get_datasets()
 
 
