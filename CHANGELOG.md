@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.1.0] - 2024-09-06
+
+### Added
+- **`splits` module**: Introduced `create_splits` function to perform pre-assigned data splits.
+- **`evaluation` module**: Added new module to provide metrics for evaluation, compatible with trainer classes.
+- **`datasets` module**: 
+  - Enabled `XrDataset` to support train/test splitting.
+  - Updated `XrDataset` and `MultiProcSampler` to perform feature scaling (normalization and standardization), with support for custom scaling functions.
+  - Added callback functionality to `PTXrDataset` for unification, aligning it with other dataset classes.
+- **`preprocessing` module**:
+  - Introduced `assign_mask` method for automatic filtering of data cubes.
+
+### Changed
+- **Module renaming**:
+  - `xr_plots` → `plotting`
+  - `cube_insights` → `insights`
+  - `cube_utilities` → `utils`
+  - `data_splits` → `splitting`
+- **`datasets` module**: 
+  - Renamed `LargeScaleXrDataset` to `PTXrDataset` (for `PyTorch`) and `TFXrDataset` (for `TensorFlow`).
+  - Updated `MultiProcSampler` to automatically add metadata to the datacube.
+- **`preprocessing` module**:
+  - Renamed `fill_masked_data` → `fill_nan_values`.
+  - Updated `drop_nan_values` method to allow NaN dropping strategy selection via the `mode` parameter.
+  - Modified `get_range` / `get_statistics` to return comprehensive dataset statistics within a dictionary, excluding predefined variables and the `split` variable.
+  - Standardization of all variables returned by `get_range` / `get_statistics` for `normalize` and `standardize` functions.
+
+### Fixed
+- **`Trainer` class (`training.pytorch` module)**: Fixed issue with transferring validation data to GPU when required.
+
+### Updated Use Cases:
+- Script added for timeseries analysis with CNN (`time_series_analysis.py`)
+- Replaced examples utilizing multidimensional data samples by (`use_case_lst_pytorch_masked.ipynb` and `use_case_lst_tensorflow_masked.ipynb`).
+
 ## [1.0.1] - 2024-07-07
 
 ### Removed
@@ -41,7 +75,7 @@
 - Added and updated examples in the `Examples` directory:
   - `distributed_dataset_creation.py` demonstrating the use of `MultiProcSampler`.
   - Updated `distributed_training.py` to utilize the new train and test sets.
-  - New masked learning examples on ESDCs (`use_case_lst_pytorch_masked.ipynb` and `use_case_lst_tensorflow_masked.ipynb`) for coastal region predictions, excluding water regions.
+  - New examples on ESDCs (`use_case_lst_pytorch_masked.ipynb` and `use_case_lst_tensorflow_masked.ipynb`) for multidimensional samples.
 
 ## [0.0.*] - 2024-05-14
 
